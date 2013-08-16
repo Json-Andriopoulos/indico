@@ -536,15 +536,59 @@ type("ConfirmPopupWithPM", ["ConfirmPopup"],
     }
 );
 
-type('ConfirmPopupWithReason', ['ConfirmPopupWithPM'], {
+type('ConfirmPopupWithActionContent', ['ConfirmPopupWithPM'], {
 
-}, function(title, content, handler, buttonTitle, cancelButtonTitle) {
+    getContentAction: function (content, action){
+        var actionsp = $("<span/>", {css: {fontWeight: 'bold', color: 'red'}, html: action});
+        var cont = content.split("/action/");
+        this.contentdiv.append(cont[0], actionsp, cont[1]);
+        return this.contentdiv;
+    },
+
+    getBody: function(note, occurs){
+        if(occurs.length>1)
+        {
+            this.contentdiv.append(note);
+            this.contentdiv.addClass("warningMessage");
+            var occursdiv = $("<div/>", {css: {maxHeight: '80px', marginTop:'3px', marginBottom: '3px', overflow:'auto', listStylePosition:'inside'}});
+            for(var i=0;i<occurs.length;i++)
+            {
+                occursdiv.append('<li>'+occurs[i]);
+            }
+            this.contentdiv.append(occursdiv);
+            return;
+        }
+        if(note.indexOf("occurrences") == -1)
+        {
+            this.contentdiv.append(note);
+            return;
+        }
+    }
+
+}, function(title, content, action, note, occurs, handler, buttonTitle, cancelButtonTitle) {
+
+    this.contentdiv = $("<div/>", {css: {maxWidth: '400px', textAlign: 'left'}});
+    this.getContentAction(content, action);
+    this.getBody(note, occurs);
+
+    this.ConfirmPopupWithPM(title, Html.div({}, this.contentdiv.get(0)), handler, buttonTitle, cancelButtonTitle);
+});
+
+type('ConfirmPopupWithReason', ['ConfirmPopupWithActionContent'], {
+
+
+}, function(title, content, action, note, occurs, handler, buttonTitle, cancelButtonTitle) {
 
     this.reason = Html.textarea({style:{width:'100%'}});
 
-    this.ConfirmPopupWithPM(title, Html.div({}, content, Html.div({style: {marginTop:pixels(10)}},Html.div({style:{fontWeight:"bold"}}, $T("Reason: ")),this.reason)), handler, buttonTitle, cancelButtonTitle);
+    this.contentdiv = $("<div/>", {css: {maxWidth: '400px', textAlign: 'left'}});
+    this.getContentAction(content, action);
+    this.getBody(note, occurs);
+
+    this.ConfirmPopupWithPM(title, Html.div({}, this.contentdiv.get(0), Html.div({style: {marginTop:pixels(10)}},Html.div({style:{fontWeight:"bold"}}, $T("*Please give a reason :")),this.reason)), handler, buttonTitle, cancelButtonTitle);
     this.parameterManager.add(this.reason, 'text', false);
 });
+
 
 
 /**
