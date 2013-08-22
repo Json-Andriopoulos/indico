@@ -1097,27 +1097,29 @@ class RHCreateAlarm( RoomBookingDBMixin, RHConferenceModifBase ):
         self._testAlarm = False
 
     def _initializeAlarm(self, dryRun = False):
-        if dryRun: # sending now
-            dtStart = timezoneUtils.nowutc()
-            relative = None
-        else:
-            if self._dateType == "1": # given date
+        if self._dateType == "1": # given date
+            if dryRun: # sending now
+                dtStart = timezoneUtils.nowutc()
+            else:
                 dtStart = timezone(self._conf.getTimezone()).localize(
                     datetime(self._year,
-                             self._month,
-                             self._day,
-                             self._hour,
-                             self._minute)).astimezone(timezone('UTC'))
-                relative = None
-            elif self._dateType == "2": # N days/hours before the event
-                if self._timeTypeBefore=="days":
-                    delta = timedelta(days=self._timeBefore)
-                elif self._timeTypeBefore=="hours":
-                    delta = timedelta(0, self._timeBefore * 3600)
-                dtStart = self._target.getStartDate() - delta
-                relative = delta
+                            self._month,
+                            self._day,
+                            self._hour,
+                            self._minute)).astimezone(timezone('UTC'))
+            relative = None
+        elif self._dateType == "2": # N days/hours before the event
+            if self._timeTypeBefore=="days":
+                delta = timedelta(days=self._timeBefore)
+            elif self._timeTypeBefore=="hours":
+                delta = timedelta(0, self._timeBefore * 3600)
+            if dryRun: # sending now
+                dtStart = timezoneUtils.nowutc()
             else:
-                raise MaKaCError(_("Wrong value has been choosen for 'when to send the alarm'"))
+                dtStart = self._target.getStartDate() - delta
+            relative = delta
+        else:
+            raise MaKaCError(_("Wrong value has been choosen for 'when to send the alarm'"))
 
         if self._alarmId:
             al = self._conf.getAlarmById(self._alarmId)
