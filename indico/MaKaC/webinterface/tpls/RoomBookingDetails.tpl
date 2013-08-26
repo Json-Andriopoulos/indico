@@ -1,6 +1,6 @@
     <script type="text/javascript">
         function submit_cancel(occurs){
-            new ConfirmPopupWithActionContent($T("Cancel booking"),$T("Are you sure you want to /action/?"), $T("CANCEL THE WHOLE BOOKING "),"(" + occurs.length + $T(" occurences)"), occurs, function(confirmed){
+            new ConfirmPopupWithActionContent($T("Cancel booking"), $T("Are you sure you want to <strong>cancel the whole booking</strong>?"), "(" + occurs.length + $T(" occurrences)"), occurs, function(confirmed){
                 if(confirmed){
                     $("#submits").attr("action", "${ urlHandlers.UHRoomBookingCancelBooking.getURL(reservation)}");
                     $("#submits").submit();
@@ -8,7 +8,7 @@
             }, $T("Yes"), $T("No")).open();
         }
         function submit_accept(){
-            new ConfirmPopupWithActionContent($T("Accept booking"), $T("Are you sure you want to /action/ your booking?"), $T("ACCEPT"), "", "", function(confirmed){
+            new ConfirmPopupWithActionContent($T("Accept booking"), $T("Are you sure you want to <strong>accept</strong>your meeting?"), "", "", function(confirmed){
                 if(confirmed){
                     $("#submits").attr("action", "${ urlHandlers.UHRoomBookingAcceptBooking.getURL(reservation)}");
                     $("#submits").submit();
@@ -16,7 +16,7 @@
             }, $T("Yes"), $T("No")).open();
         }
         function submit_reject(occurs){
-            new ConfirmPopupWithReason($T("Reject booking"), $T("Are you sure you want to /action/?"),$T("REJECT THE WHOLE BOOKING"),"(" + occurs.length + $T(" occurences)"), occurs, function(confirmed){
+            new ConfirmPopupWithReason($T("Reject booking"), $T("Are you sure you want to <strong>reject the whole booking</strong>?"), "(" + occurs.length + $T(" occurrences)"), occurs, function(confirmed){
                 if(confirmed){
                     var reason = this.reason.get();
                     $("#submits").attr("action", build_url("${ urlHandlers.UHRoomBookingRejectBooking.getURL(reservation)}", {reason: reason}));
@@ -26,7 +26,7 @@
 
         }
         function submit_reject_occurrence(action, date){
-            new ConfirmPopupWithReason($T("Reject occurrence"), $T("Are you sure you want to /action/ the booking for the selected date?"),$T("REJECT"), "("+ date + ")", "", function(confirmed){
+            new ConfirmPopupWithReason($T("Reject occurrence"), $T("Are you sure you want to <strong>reject</strong> the booking for the selected date? "), "("+ date + ")", "", function(confirmed){
                 if(confirmed){
                     var reason = this.reason.get();
                     $("#submits").attr("action", build_url(action, {reason: reason}));
@@ -35,7 +35,7 @@
             }, $T("Yes"), $T("No")).open();
         }
         function submit_cancel_occurrence(action, date){
-            new ConfirmPopupWithActionContent($T("Cancel ocurrence"), $T("Are you sure you want to /action/ the booking for the selected date?"), $T("CANCEL"), "("+ date + ")", "", function(confirmed){
+            new ConfirmPopupWithActionContent($T("Cancel ocurrence"), $T("Are you sure you want to <strong>cancel</strong> the booking for the selected date? "), "("+ date + ")", "", function(confirmed){
                 if(confirmed){
                     $("#submits").attr("action", action);
                     $("#submits").submit();
@@ -47,7 +47,7 @@
             $("#submits").submit();
         }
         function submit_delete(){
-            new ConfirmPopupWithActionContent($T("Delete booking"), $T("This action is irreversible.Are you sure you want to /action/ the booking?"), $T("DELETE"), "", "", function(confirmed){
+            new ConfirmPopupWithActionContent($T("Delete booking"), $T("This action is irreversible.Are you sure you want to <strong>delete</strong> the booking?"), "", "", function(confirmed){
                 if(confirmed) {
                     $("#submits").attr("action", '${ urlHandlers.UHRoomBookingDeleteBooking.getURL( reservation ) }');
                     $("#submits").submit();
@@ -58,6 +58,7 @@
             $("#submits").attr("action", "${cloneURL}");
             $("#submits").submit();
         }
+
     </script>
 
     <!-- CONTEXT HELP DIVS -->
@@ -422,12 +423,11 @@
                                             % for period in reservation.splitToPeriods():
                                                 ${ formatDate(period.startDT.date()) }
                                                 % if canReject:
-                                                    <a href="javascript: void( 0 )" onclick="submit_reject_occurrence( '${ urlHandlers.UHRoomBookingRejectBookingOccurrence.getURL( reservation, date=formatDate(period.startDT.date(), format='%Y-%m-%d') ) }', '${ formatDate(period.startDT.date()) }');">Reject</a>
+                                                    <a class="roomBookingRejectOccurrence" data-date = "${ formatDate(period.startDT.date()) }" href="#" data-action = "${ urlHandlers.UHRoomBookingRejectBookingOccurrence.getURL( reservation, date=formatDate(period.startDT.date(), format='%Y-%m-%d') ) }">Reject</a>
                                                 % endif
                                                 % if canCancel:
-                                                    <a href="javascript: void( 0 )" onclick="submit_cancel_occurrence('${ urlHandlers.UHRoomBookingCancelBookingOccurrence.getURL( reservation, date=formatDate(period.startDT.date(), format='%Y-%m-%d') ) }', '${ formatDate(period.startDT.date()) }');">Cancel</a>
+                                                    <a class="roomBookingCancelOccurrence" data-date = "${ formatDate(period.startDT.date()) }"href="#" data-action = "${ urlHandlers.UHRoomBookingCancelBookingOccurrence.getURL( reservation, date=formatDate(period.startDT.date(), format='%Y-%m-%d') ) }">Cancel</a>
                                                 % endif
-
                                                 <br />
                                             % endfor
                                             </td>
@@ -458,3 +458,13 @@
         </tr>
     </table>
     <br />
+    <script>
+        $( ".roomBookingRejectOccurrence" ).click(function() {
+            submit_reject_occurrence($(this).data('action'), $(this).data('date'));
+
+        });
+        $( ".roomBookingCancelOccurrence" ).click(function() {
+            submit_cancel_occurrence($(this).data('action'), $(this).data('date'));
+
+        });
+    </script>
