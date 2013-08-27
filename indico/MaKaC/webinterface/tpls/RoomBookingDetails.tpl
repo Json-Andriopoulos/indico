@@ -1,6 +1,7 @@
     <script type="text/javascript">
         function submit_cancel(occurs){
-            new ConfirmPopupWithActionContent($T("Cancel booking"), $T("Are you sure you want to <strong>cancel the whole booking</strong>?"), "(" + occurs.length + $T(" occurrences)"), occurs, function(confirmed){
+            new ConfirmPopupWithActionContent($T("Cancel booking"), $T("Are you sure you want to <strong>cancel the \
+                whole booking</strong>?"), "(" + occurs.length + $T(" occurrences)"), occurs, function(confirmed){
                 if(confirmed){
                     $("#submits").attr("action", "${ urlHandlers.UHRoomBookingCancelBooking.getURL(reservation)}");
                     $("#submits").submit();
@@ -8,7 +9,8 @@
             }, $T("Yes"), $T("No")).open();
         }
         function submit_accept(){
-            new ConfirmPopupWithActionContent($T("Accept booking"), $T("Are you sure you want to <strong>accept</strong>your meeting?"), "", "", function(confirmed){
+            new ConfirmPopupWithActionContent($T("Accept booking"), $T("Are you sure you want to <strong>accept</strong> \
+                your meeting?"), "", "", function(confirmed){
                 if(confirmed){
                     $("#submits").attr("action", "${ urlHandlers.UHRoomBookingAcceptBooking.getURL(reservation)}");
                     $("#submits").submit();
@@ -16,7 +18,8 @@
             }, $T("Yes"), $T("No")).open();
         }
         function submit_reject(occurs){
-            new ConfirmPopupWithReason($T("Reject booking"), $T("Are you sure you want to <strong>reject the whole booking</strong>?"), "(" + occurs.length + $T(" occurrences)"), occurs, function(confirmed){
+            new ConfirmPopupWithReason($T("Reject booking"), $T("Are you sure you want to <strong>reject the whole booking \
+                </strong>?"), "(" + occurs.length + $T(" occurrences)"), occurs, function(confirmed){
                 if(confirmed){
                     var reason = this.reason.get();
                     $("#submits").attr("action", build_url("${ urlHandlers.UHRoomBookingRejectBooking.getURL(reservation)}", {reason: reason}));
@@ -26,7 +29,8 @@
 
         }
         function submit_reject_occurrence(action, date){
-            new ConfirmPopupWithReason($T("Reject occurrence"), $T("Are you sure you want to <strong>reject</strong> the booking for the selected date? "), "("+ date + ")", "", function(confirmed){
+            new ConfirmPopupWithReason($T("Reject occurrence"), $T("Are you sure you want to <strong>reject</strong> \
+                the booking for the selected date? "), "("+ date + ")", "", function(confirmed){
                 if(confirmed){
                     var reason = this.reason.get();
                     $("#submits").attr("action", build_url(action, {reason: reason}));
@@ -35,7 +39,8 @@
             }, $T("Yes"), $T("No")).open();
         }
         function submit_cancel_occurrence(action, date){
-            new ConfirmPopupWithActionContent($T("Cancel ocurrence"), $T("Are you sure you want to <strong>cancel</strong> the booking for the selected date? "), "("+ date + ")", "", function(confirmed){
+            new ConfirmPopupWithActionContent($T("Cancel ocurrence"), $T("Are you sure you want to <strong>cancel</strong> \
+                the booking for the selected date? "), "("+ date + ")", "", function(confirmed){
                 if(confirmed){
                     $("#submits").attr("action", action);
                     $("#submits").submit();
@@ -47,7 +52,8 @@
             $("#submits").submit();
         }
         function submit_delete(){
-            new ConfirmPopupWithActionContent($T("Delete booking"), $T("This action is irreversible.Are you sure you want to <strong>delete</strong> the booking?"), "", "", function(confirmed){
+            new ConfirmPopupWithActionContent($T("Delete booking"), $T("This action is irreversible.Are you sure you want \
+                to <strong>delete</strong> the booking?"), "", "", function(confirmed){
                 if(confirmed) {
                     $("#submits").attr("action", '${ urlHandlers.UHRoomBookingDeleteBooking.getURL( reservation ) }');
                     $("#submits").submit();
