@@ -965,25 +965,20 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
         if not start_date:
             start_date = end_date + relativedelta(months=-1)
 
-        return (
-            self.reservations
-                .join(ReservationOccurrence)
-                .with_entities(
-                    func.sum(
-                        func.abs(
-                            extract('epoch', ReservationOccurrence.start) - extract('epoch', ReservationOccurrence.end)
-                        )
-                    )
+        q = self.reservations.filter(Reservation.is_cancelled == False,
+                                     Reservation.is_rejected == False,
+                                     ReservationOccurrence.start >= start_date,
+                                     ReservationOccurrence.end <= end_date,
+                                     ReservationOccurrence.is_valid).join(ReservationOccurrence)
+        q = q.with_entities(
+            func.sum(
+                func.abs(
+                    extract('epoch', ReservationOccurrence.start) - extract('epoch', ReservationOccurrence.end)
                 )
-                .filter(
-                    # Reservation.is_cancelled == False,
-                    # Reservation.is_rejected == False,
-                    ReservationOccurrence.start >= start_date,
-                    ReservationOccurrence.end <= end_date,
-                    ReservationOccurrence.is_valid
-                )
-                .scalar()
-        ) or 0
+            )
+        )
+
+        return q.scalar() or 0
 
     def getTotalBookableTime(self, start_date=None, end_date=None):
         if not end_date:
