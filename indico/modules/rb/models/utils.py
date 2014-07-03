@@ -68,7 +68,7 @@ def unimplemented(exceptions=(Exception,), message='Unimplemented'):
             try:
                 return func(*args, **kw)
             except exceptions:
-                raise IndicoError(message)
+                raise IndicoError(str(message))
 
         return _wrapper
 
@@ -93,7 +93,7 @@ def versioned_cache(cache, primary_key_attr='id'):
         def __committed__(self, change):
             super(_CacheVersionMixin, self).__committed__(change)
             if change == 'delete':
-                cache.delete(_get_key())
+                cache.delete(_get_key(self))
             else:
                 self.cache_version += 1
 

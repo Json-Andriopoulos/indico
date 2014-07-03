@@ -1,15 +1,13 @@
 <table cellpadding="0" cellspacing="0" border="0" width="80%">
-  % if standalone:
-    <tr>
-      <td class="intermediateleftvtab" style="border-left: 2px solid #777777; border-right: 2px solid #777777; font-size: xx-small;" width="100%">&nbsp;</td> <!-- lastvtabtitle -->
-    </tr>
-  % endif
+  <tr>
+    <td class="intermediateleftvtab" style="border-left: 2px solid #777777; border-right: 2px solid #777777; font-size: xx-small;" width="100%">&nbsp;</td> <!-- lastvtabtitle -->
+  </tr>
   <tr>
     <td class="bottomvtab" width="100%">
       <table width="100%" cellpadding="0" cellspacing="0" class="htab" border="0">
         <tr>
           <td class="maincell">
-            <h2 class="page-title">${ title }</h2>
+            <h2 class="page-title">${ _(' Found {} rooms ').format(len(rooms)) }</h2>
             % if rooms:
               <table width="100%" class="filesTab">
                 <tr>
@@ -29,12 +27,12 @@
                               <td class="titleCellTD" colspan="10" style="height: 0px">&nbsp;</td>
                             </tr>
                             % for room in rooms:
-                              <% details_url = detailsUH.getURL(room) %>
-                              <% booking_url = bookingUH.getURL(room) %>
+                              <% details_url = url_for('rooms.roomBooking-roomDetails', room) %>
+                              <% booking_url = url_for('rooms.room_book', room) %>
                               <% modification_url = url_for('rooms_admin.modify_room', room) %>
                               <% on_click_details_url = 'onclick="window.location=\'{}\'"'.format(details_url) %>
                               % if mapAvailable:
-                                <% show_on_map = mapUH.getURL(roomID=room.id) %>
+                                <% show_on_map = url_for('rooms.roomBooking-mapOfRooms', roomID=room.id) %>
                               % endif
                               <tr style="height: 60px" id="${ room.id }" class="resvHover">
                                 <td ${ on_click_details_url }>
@@ -54,12 +52,12 @@
                                 </td>
                                 <td>
                                   <a href="${ details_url }">${ _('view') }</a><br/>
-                                  % if room.canBeBookedBy(user):
+                                  % if room.can_be_booked(user):
                                     <a href="${ booking_url }">${ _('book') }</a><br/>
-                                  % elif room.canBePrebookedBy(user) and not room.canBeBookedBy(user):
+                                  % elif room.can_be_prebooked(user):
                                     <a href="${ booking_url }">${ _('PRE-book') }</a><br/>
                                   % endif
-                                  % if room.canBeModifiedBy(user):
+                                  % if room.can_be_modified(user):
                                     <a href="${ modification_url }"> ${ _('modify') }</a><br/>
                                   % endif
                                   % if mapAvailable:
@@ -83,7 +81,7 @@
                 </tr>
               </table>
             % else:
-              <span class="actionFailed">${ noResultsMsg }</span>
+              <span class="actionFailed">${ _('There are no rooms with this search criteria') }</span>
             % endif
           </td>
         </tr>

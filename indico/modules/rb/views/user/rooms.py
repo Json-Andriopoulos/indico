@@ -106,7 +106,6 @@ class WRoomBookingMapOfRoomsWidget(WTemplated):
         wvars['forVideoConference'] = self._forVideoConference
         wvars['roomID'] = self._roomID
 
-        wvars['roomBookingRoomListURL'] = UH.UHRoomBookingRoomList.getURL(None)
         wvars['startDT'] = session.get('_rb_default_start')
         wvars['endDT'] = session.get('_rb_default_end')
         wvars['startT'] = session.get('_rb_default_start').time().strftime('%H:%M')
@@ -118,63 +117,7 @@ class WRoomBookingMapOfRoomsWidget(WTemplated):
         return wvars
 
 
-class WPRoomBookingRoomList(WPRoomBookingBase):
-    def __init__(self, rh):
-        WPRoomBookingBase.__init__(self, rh)
-        self._rh = rh
-
-    def _getTitle(self):
-        return '{} - {}'.format(
-            WPRoomBookingBase._getTitle(self),
-            _('My Rooms') if self._rh._form.is_only_my_rooms.data else _('Found rooms')
-        )
-
-    def _setCurrentMenuItem(self):
-        if self._rh._form.is_only_my_rooms.data:
-            self._myRoomListOpt.setActive(True)
-        else:
-            self._roomSearchOpt.setActive(True)
-
-    def _getBody(self, params):
-        return WRoomBookingRoomList(self._rh, standalone=True).getHTML(params)
-
-
-class WRoomBookingRoomList(WTemplated):
-    def __init__(self, rh, standalone=False):
-        self._rh = rh
-        self._standalone = standalone
-
-    def getVars(self):
-        wvars = WTemplated.getVars(self)
-        f = self._rh._form
-
-        wvars['rooms'] = self._rh._rooms
-        wvars['mapAvailable'] = self._rh._mapAvailable
-        wvars['standalone'] = self._standalone
-        wvars['title'] = self._rh._title
-        if f.is_only_my_rooms.data:
-            wvars['noResultsMsg'] = _('You are not the owner of any room')
-        else:
-            wvars['noResultsMsg'] = _('There are no rooms with this search criteria')
-
-        if self._standalone:
-            wvars['detailsUH'] = UH.UHRoomBookingRoomDetails
-            wvars['bookingUH'] = UH.UHRoomBookingBookingForm
-        else:
-            wvars['conference'] = self._rh._conf
-            wvars['detailsUH'] = UH.UHConfModifRoomBookingRoomDetails
-            wvars['bookingUH'] = UH.UHConfModifRoomBookingBookingForm
-        wvars['mapUH'] = UH.UHRoomBookingMapOfRooms
-
-        return wvars
-
-
-class WPRoomBookingSearch4Rooms(WPRoomBookingBase):
-    def __init__(self, rh, is_new_booking=False):
-        WPRoomBookingBase.__init__(self, rh)
-        self._rh = rh
-        self._is_new_booking = is_new_booking
-
+class WPRoomBookingSearchRooms(WPRoomBookingBase):
     def getJSFiles(self):
         return WPRoomBookingBase.getJSFiles(self) + self._includeJSPackage('RoomBooking')
 
@@ -182,50 +125,30 @@ class WPRoomBookingSearch4Rooms(WPRoomBookingBase):
         return '{} - {}'.format(WPRoomBookingBase._getTitle(self), _('Search for rooms'))
 
     def _setCurrentMenuItem(self):
-        if self._is_new_booking:
-            self._bookARoomOpt.setActive(True)
-        else:
-            self._roomSearchOpt.setActive(True)
+        self._roomSearchOpt.setActive(True)
 
     def _getBody(self, params):
-        return WRoomBookingSearch4Rooms(self._rh, standalone=True).getHTML(params)
-
-
-class WRoomBookingSearch4Rooms(WTemplated):
-    def __init__(self, rh, standalone=False):
-        self._standalone = standalone
-        self._rh = rh
-
-    def getVars(self):
-        wvars = WTemplated.getVars(self)
-
-        wvars['standalone'] = self._standalone
-        wvars['forNewBooking'] = self._rh._is_new_booking
-        wvars['eventRoomName'] = self._rh._event_room_name
-
-        wvars['locations'] = self._rh._locations
-        wvars['rooms'] = self._rh._rooms
-        wvars['possibleEquipment'] = self._rh._equipments
-        wvars['isResponsibleForRooms'] = Room.isAvatarResponsibleForRooms(self._rh.getAW().getUser())
-
         today = next_work_day()
-        wvars['startDT'] = datetime.combine(today.date(), time(8, 30))
-        wvars['endDT'] = datetime.combine(today.date(), time(17, 30))
-        wvars['startT'] = wvars['startDT'].time().strftime("%H:%M")
-        wvars['endT'] = wvars['endDT'].strftime("%H:%M")
-        wvars['repeatability'] = RepeatMapping.getOldMapping(RepeatUnit.NEVER, 0)
+        params['startDT'] = datetime.combine(today.date(), time(8, 30))
+        params['endDT'] = datetime.combine(today.date(), time(17, 30))
+        params['startT'] = params['startDT'].strftime('%H:%M')
+        params['endT'] = params['endDT'].strftime('%H:%M')
+        return WTemplated('RoomBookingSearchRooms').getHTML(params)
 
-        if self._standalone:
-            # URLs for standalone room booking
-            wvars['roomBookingRoomListURL'] = UH.UHRoomBookingRoomList.getURL(None)
-            wvars['detailsUH'] = UH.UHRoomBookingRoomDetails
-            wvars['bookingFormUH'] = UH.UHRoomBookingBookingForm
-        else:
-            # URLs for room booking in the event context
-            wvars['roomBookingRoomListURL'] = UH.UHConfModifRoomBookingRoomList.getURL(self._rh._conf)
-            wvars['detailsUH'] = UH.UHConfModifRoomBookingRoomDetails
-            wvars['bookingFormUH'] = UH.UHConfModifRoomBookingBookingForm
-        return wvars
+
+class WPRoomBookingSearchRoomsResults(WPRoomBookingBase):
+    def __init__(self, rh, menu_item, **kwargs):
+        self._menu_item = menu_item
+        WPRoomBookingBase.__init__(self, rh, **kwargs)
+
+    def _setCurrentMenuItem(self):
+        getattr(self, '_{}Opt'.format(self._menu_item)).setActive(True)
+
+    def _getTitle(self):
+        return '{} - {}'.format(WPRoomBookingBase._getTitle(self), _('Search results'))
+
+    def _getBody(self, params):
+        return WTemplated('RoomBookingSearchRoomsResults').getHTML(params)
 
 
 class WPRoomBookingRoomDetails(WPRoomBookingBase):
@@ -235,9 +158,6 @@ class WPRoomBookingRoomDetails(WPRoomBookingBase):
 
     def _getTitle(self):
         return '{} - {}'.format(WPRoomBookingBase._getTitle(self), _('Room Details'))
-
-    def _setCurrentMenuItem(self):
-        self._roomSearchOpt.setActive(True)
 
     def getJSFiles(self):
         return WPRoomBookingBase.getJSFiles(self) + self._includeJSPackage('RoomBooking')

@@ -89,7 +89,7 @@ class RepeatMapping(object):
     @unimplemented(exceptions=(KeyError,), message=_('Unknown old repeatability'))
     def getNewMapping(cls, repeat):
         if repeat is None or repeat < 5:
-            for k, (_, v) in cls._mapping.iteritems():
+            for k, (_, v, _) in cls._mapping.iteritems():
                 if v == repeat:
                     return k
         else:
@@ -134,7 +134,7 @@ class Reservation(Serializer, db.Model):
         db.DateTime,
         nullable=False
     )
-    # repeatibility
+    # repeatability
     repeat_unit = db.Column(
         db.SmallInteger,
         nullable=False,
@@ -524,6 +524,9 @@ class Reservation(Serializer, db.Model):
         populate_fields = ('start_date', 'end_date', 'repeat_unit', 'repeat_step', 'room_id', 'booked_for_id',
                            'contact_email', 'contact_phone', 'booking_reason', 'equipments',
                            'needs_general_assistance', 'uses_video_conference', 'needs_video_conference_setup')
+
+        if data['repeat_unit'] == RepeatUnit.NEVER and data['start_date'].date() != data['end_date'].date():
+            raise ValueError('end_date != start_date for non-repeating booking')
 
         if prebook is None:
             prebook = not room.can_be_booked(user)
@@ -1005,20 +1008,20 @@ class Reservation(Serializer, db.Model):
         return True
 
     def can_be_accepted(self, user):
-        return user and (user.isRBAdmin() or self.room.isOwnedBy(user))
+        return user and (user.isRBAdmin() or self.room.is_owned_by(user))
 
     def can_be_modified(self, user):
         if not user:
             return False
         if self.is_rejected or self.is_cancelled:
             return False
-        return user.isRBAdmin() or self.created_by_user == user or self.room.isOwnedBy(user) or self.isBookedFor(user)
+        return user.isRBAdmin() or self.created_by_user == user or self.room.is_owned_by(user) or self.isBookedFor(user)
 
     def can_be_cancelled(self, user):
         return user and (self.isOwnedBy(user) or user.isRBAdmin() or self.isBookedFor(user))
 
     def can_be_rejected(self, user):
-        return user and (user.isRBAdmin() or self.room.isOwnedBy(user))
+        return user and (user.isRBAdmin() or self.room.is_owned_by(user))
 
     def can_be_deleted(self, user):
         return user and user.isRBAdmin()

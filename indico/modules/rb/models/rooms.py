@@ -21,6 +21,8 @@
 Schema of a room
 """
 
+import ast
+import json
 from datetime import date, datetime, timedelta
 
 from dateutil.relativedelta import relativedelta
@@ -44,7 +46,7 @@ from indico.modules.rb.models import utils
 from indico.modules.rb.models.blockings import Blocking
 from indico.modules.rb.models.blocked_rooms import BlockedRoom
 from indico.modules.rb.models.reservation_occurrences import ReservationOccurrence
-from indico.modules.rb.models.reservations import Reservation
+from indico.modules.rb.models.reservations import Reservation, RepeatMapping
 from indico.modules.rb.models.room_attributes import RoomAttribute, RoomAttributeAssociation
 from indico.modules.rb.models.room_bookable_times import BookableTime
 from indico.modules.rb.models.room_equipments import RoomEquipment, RoomEquipmentAssociation
@@ -315,22 +317,18 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
     def has_photo(self):
         return self.photo_id is not None
 
-    @hybrid_property
+    @property
     @cached(_cache)
     def is_public(self):
         return self.is_reservable and not self.has_booking_groups
 
-    @is_public.expression
-    def is_public(self):
-        return self.query \
-                   .outerjoin(RoomAttributeAssociation) \
-                   .outerjoin(RoomAttribute) \
-                   .filter(RoomAttribute.name == 'allowed-booking-group', Room.is_reservable) \
-                   .count() == 0
-
-    @property
+    @hybrid_property
     def is_auto_confirm(self):
         return not self.reservations_need_confirmation
+
+    @is_auto_confirm.expression
+    def is_auto_confirm(self):
+        return ~self.reservations_need_confirmation
 
     @property
     def marker_description(self):
@@ -549,51 +547,89 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
     def getRoomByName(name):
         return Room.query.filter_by(name=name).first()
 
-    # TODO: capacity check should go into config, current 20%
     @staticmethod
-    def getRoomsForRoomList(f, avatar):
+    def getRoomsForRoomList(form, avatar):
         from .locations import Location
 
-        equipment_count = len(f.equipments.data)
-        equipment_subquery = db.session.query(RoomEquipmentAssociation) \
-                               .with_entities(func.count(RoomEquipmentAssociation.c.room_id)) \
-                               .filter(
-                                    RoomEquipmentAssociation.c.room_id == Room.id,
-                                    RoomEquipmentAssociation.c.equipment_id.in_(f.equipments.data)
-                               ) \
-                               .correlate(Room) \
-                               .as_scalar()
+        equipment_count = len(form.equipments.data)
+        equipment_subquery = (
+            db.session.query(RoomEquipmentAssociation)
+            .with_entities(func.count(RoomEquipmentAssociation.c.room_id))
+            .filter(
+                RoomEquipmentAssociation.c.room_id == Room.id,
+                RoomEquipmentAssociation.c.equipment_id.in_(eq.id for eq in form.equipments.data)
+            )
+            .correlate(Room)
+            .as_scalar()
+        )
 
-        q = Room.query \
-                .join(Location.rooms) \
-                .filter(
-                    Location.id == f.location_id.data if f.location_id.data else True,
-                    (Room.capacity >= (f.capacity.data * 0.8)) if f.capacity.data else True,
-                    Room.is_public == f.is_public.data if f.is_public.data else True,
-                    Room.is_auto_confirm == f.is_auto_confirm.data if f.is_auto_confirm.data else True,
-                    Room.is_active == f.is_active.data if f.is_active.data else True,
-                    Room.owner_id == avatar.getId() if f.is_only_my_rooms.data else True,
-                    (equipment_subquery == equipment_count) if equipment_count else True
-                )
+        q = (
+            Room.query
+            .join(Location.rooms)
+            .filter(
+                Location.id == form.location.data.id if form.location.data else True,
+                (Room.capacity >= (form.capacity.data * 0.8)) if form.capacity.data else True,
+                Room.is_reservable if form.is_only_public.data else True,
+                Room.is_auto_confirm if form.is_auto_confirm.data else True,
+                Room.is_active if form.is_only_active.data or not form.is_only_active else True,
+                Room.owner_id == avatar.getId() if form.is_only_my_rooms.data else True,
+                (equipment_subquery == equipment_count) if equipment_count else True)
+        )
+
+        if form.available.data != -1:
+            # Check for occurrences during the given period
+            repeat_unit, repeat_step = RepeatMapping.getNewMapping(ast.literal_eval(form.repeatability.data))
+            occurrences = ReservationOccurrence.create_series(form.start_date.data, form.end_date.data,
+                                                              (repeat_unit, repeat_step))
+            overlap_criteria = ReservationOccurrence.build_overlap_criteria(occurrences)
+            reservation_criteria = [Reservation.room_id == Room.id, or_(*overlap_criteria)]
+            if not form.include_pre_bookings.data:
+                reservation_criteria.append(Reservation.is_confirmed)
+            occurrences_filter = Reservation.occurrences.any(and_(*reservation_criteria))
+            # Check for blockings during the given period
+            if form.include_pending_blockings.data:
+                valid_states = (BlockedRoom.State.accepted, BlockedRoom.State.pending)
+            else:
+                valid_states = (BlockedRoom.State.accepted,)
+            blocking_criteria = [Blocking.id == BlockedRoom.blocking_id,
+                                 Blocking.start_date <= form.end_date.data,
+                                 Blocking.end_date >= form.start_date.data,
+                                 BlockedRoom.state.in_(valid_states)]
+            blocking_filter = Room.blocked_rooms.any(and_(*blocking_criteria))
+            # Filter the search results
+            if form.available.data == 0:  # booked/unavailable
+                q = q.filter(occurrences_filter | blocking_filter)
+            elif form.available.data == 1:  # available
+                q = q.filter(~occurrences_filter, ~blocking_filter)
 
         free_search_columns = (
-            'name', 'site', 'division', 'building', 'floor',
-            'number', 'telephone', 'key_location', 'comments'
+            'name', 'site', 'division', 'building', 'floor', 'number', 'telephone', 'key_location', 'comments'
         )
-        if f.free_search.data:
-            q = q.filter(
-                or_(
-                    *[getattr(Room, c).ilike(u'%{}%'.format(f.free_search.data))
-                      for c in free_search_columns]
-                )
-            )
+        if form.details.data:
+            # Attributes are stored JSON-encoded, so we need to JSON-encode the provided string and remove the quotes
+            # afterwards since PostgreSQL currently does not expose a function to decode a JSON string:
+            # http://www.postgresql.org/message-id/51FBF787.5000408@dunslane.net
+            details = form.details.data.lower()
+            details_str = u'%{}%'.format(details)
+            details_json = u'%{}%'.format(json.dumps(details)[1:-1])
+            free_search_criteria = [getattr(Room, c).ilike(details_str) for c in free_search_columns]
+            free_search_criteria.append(Room.attributes.any(RoomAttributeAssociation.raw_data.ilike(details_json)))
+            q = q.filter(or_(*free_search_criteria))
 
         q = q.order_by(Room.capacity)
-        return q.all()
-
-    # TODO
-    def isAvailable(self, r):
-        return len(r.getCollisions()) == 0
+        rooms = q.all()
+        # Apply a bunch of filters which are *much* easier to do here than in SQL!
+        if form.is_only_public.data:
+            # This may trigger additional SQL queries but is_public is cached and doing this check here is *much* easier
+            rooms = [r for r in rooms if r.is_public]
+        if form.capacity.data:
+            # Unless it would result in an empty resultset we don't want to show room which >20% more capacity
+            # than requested. This cannot be done easily in SQL so we do that logic here after the SQL query already
+            # weeded out rooms that are too small
+            matching_capacity_rooms = [r for r in rooms if r.capacity <= form.capacity.data * 1.2]
+            if matching_capacity_rooms:
+                rooms = matching_capacity_rooms
+        return rooms
 
     def getResponsible(self):
         return AvatarHolder().getById(self.owner_id)
@@ -853,7 +889,7 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
         if not avatar:
             return False
 
-        if (not ignore_admin and avatar.isRBAdmin()) or (self.isOwnedBy(avatar) and self.is_active):
+        if (not ignore_admin and avatar.isRBAdmin()) or (self.is_owned_by(avatar) and self.is_active):
             return True
 
         if self.is_active and self.is_reservable and (prebook or not self.reservations_need_confirmation):
@@ -871,7 +907,7 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
         return self._can_be_booked(avatar, ignore_admin=ignore_admin)
 
     def can_be_overriden(self, avatar):
-        return avatar.isRBAdmin() or self.isOwnedBy(avatar)
+        return avatar.isRBAdmin() or self.is_owned_by(avatar)
 
     def can_be_prebooked(self, avatar, ignore_admin=False):
         """
@@ -880,7 +916,7 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
         """
         return self._can_be_booked(avatar, prebook=True, ignore_admin=ignore_admin)
 
-    def canBeModifiedBy(self, accessWrapper):
+    def can_be_modified(self, accessWrapper):
         """Only admin can modify rooms."""
         if not accessWrapper:
             return False
@@ -893,11 +929,10 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
 
         raise MaKaCError(_('canModify requires either AccessWrapper or Avatar object'))
 
-    def canBeDeletedBy(self, accessWrapper):
-        """Entity can modify is also capable of deletion"""
-        return self.canBeModifiedBy(accessWrapper)
+    def can_be_deleted(self, accessWrapper):
+        return self.can_be_modified(accessWrapper)
 
-    def isOwnedBy(self, avatar):
+    def is_owned_by(self, avatar):
         """
         Returns True if user is responsible for this room. False otherwise.
         """
@@ -1124,7 +1159,7 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
     def check_advance_days(self, end_date, user=None, quiet=False):
         if not self.max_advance_days:
             return
-        if user and (user.isRBAdmin() or self.isOwnedBy(user)):
+        if user and (user.isRBAdmin() or self.is_owned_by(user)):
             return
         advance_days = (end_date - date.today()).days
         ok = advance_days < self.max_advance_days
@@ -1135,7 +1170,7 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
             raise IndicoError(msg.format(self.max_advance_days))
 
     def check_bookable_times(self, start_time, end_time, user=None, quiet=False):
-        if user and (user.isRBAdmin() or self.isOwnedBy(user)):
+        if user and (user.isRBAdmin() or self.is_owned_by(user)):
             return True
         bookable_times = self.bookable_times.all()
         if not bookable_times:
