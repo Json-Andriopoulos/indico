@@ -339,7 +339,8 @@ class Location(db.Model):
                 .group_by(
                     Reservation.is_live,
                     Reservation.is_cancelled,
-                    Reservation.is_rejected
+                    Reservation.is_rejected,
+                    Reservation.end_date
                 )
                 .all()
         )
