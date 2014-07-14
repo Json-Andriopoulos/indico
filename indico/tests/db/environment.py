@@ -26,6 +26,7 @@ from flask.ext.sqlalchemy import models_committed
 from sqlalchemy.orm import configure_mappers
 
 from indico.core.db import db
+from MaKaC.user import Avatar
 from indico.modules.rb.models import *
 from indico.web.flask.app import make_app
 from indico.core.db.sqlalchemy.core import on_models_committed
@@ -48,6 +49,7 @@ class DBTest(TestCase):
         return app
 
     def setUp(self):
+        self.tearDown()
         db.create_all()
         self.init_db()
 
