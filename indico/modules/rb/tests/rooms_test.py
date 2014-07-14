@@ -32,6 +32,10 @@ from indico.tests.db.util import diff
 
 
 class TestRoom(DBTest):
+    """
+    Testing the most important functions of the Room class from
+    the room booking models.
+    """
 
     def iterRooms(self):
         for r in ROOMS:
@@ -39,6 +43,8 @@ class TestRoom(DBTest):
             yield r, room
             db.session.add(room)
         transaction.commit()
+
+#*****************************************CHECKED_AND_RUNNING**********************************************************
 
     def testGetLocator(self):
         for r, room in self.iterRooms():
@@ -53,48 +59,50 @@ class TestRoom(DBTest):
     def testDoesHaveLiveReservations(self):
         for r, room in self.iterRooms():
             def is_live(resv):
-                return resv['start_date'] >= datetime.utcnow()
+                #Live reservations: Happening now or future reservations.
+                return resv['start_date'] >= datetime.utcnow() or resv['end_date'] >= datetime.utcnow()
             c = len(filter(is_live, r.get('reservations', []))) > 0
             assert c == room.doesHaveLiveReservations()
 
-    def testGetAttributeByName(self):
-        for r, room in self.iterRooms():
-            for attr in r.get('attributes', []):
-                print room.getAttributeByName(attr['name'])
-                # assert attr['name'] == room.getAttributeByName(attr['name']).name
-
     def testGetCollisions(self):
-        for r, room in self.iterRooms():
-            assert r.get('excluded_days') == room.getCollisions()
+        for p in NO_RESERVATION_PERIODS:
+            for r, room in self.iterRooms():
+                assert len(room.getCollisions(p[0], p[1])) == 0
+        for p in RESERVATION_PERIODS:
+            assert any(len(room.getCollisions(p[0], p[1])) > 0 for r, room in self.iterRooms())
 
     def testGetReservationStats(self):
         for r, room in self.iterRooms():
-            print room.getReservationStats()
-
-    def testGetBookableTimes(self):
-        for r, room in self.iterRooms():
-            assert r.get('bookable_times', []) == map(lambda b: b.toDict(), room.getBookableTimes())
-
-    def testGetTotalBookableTime(self):
-        for r, room in self.iterRooms():
-            pprint(room.getTotalBookableTime())
-            print
+            reservations_num = 0
+            for res in room.getReservationStats():
+                reservations_num += room.getReservationStats()[res]
+            assert reservations_num == len(r.get('reservations', []))
 
     def testGetTotalBookedTime(self):
         for r, room in self.iterRooms():
-            pprint(room.getTotalBookedTime())
-
-    def testGetAverageOccupation(self):
-        for r, room in self.iterRooms():
-            pprint(room.getAverageOccupation(datetime(2012, 1, 1), datetime(2015, 1, 1)))
+            if len(r.get('reservations', [])) > 0:
+                assert any(room.getTotalBookedTime(period[0], period[1]) > 0 for period in RESERVATION_PERIODS)
+            else:
+                assert all(room.getTotalBookedTime(period[0], period[1]) == 0 for period in NO_RESERVATION_PERIODS)
 
     def testGetVerboseEquipment(self):
-        e1 = RoomEquipment(name='eq1')
-        e2 = RoomEquipment(name='eq2')
+        e1 = RoomEquipment(name='eq1', location_id=1)
+        e2 = RoomEquipment(name='eq2', location_id=1)
 
         room = Room.get(5)
         room.equipments.extend([e1, e2])
         db.session.add(room)
-        db.session.commit()
+        transaction.commit()
 
-        assert ','.join(['eq1', 'eq2']) == Room.get(5).getVerboseEquipment()
+        equipment_added = unicode('eq1, eq2')
+        assert equipment_added == Room.get(5).getVerboseEquipment()
+
+#******************************************************NON_RUNNING*****************************************************
+
+    def testGetTotalBookableTime(self):
+        for r, room in self.iterRooms():
+            print room.getTotalBookableTime(RESERVATION_PERIODS[0][0], RESERVATION_PERIODS[0][1])
+
+    def testGetAverageOccupation(self):
+        for r, room in self.iterRooms():
+            pprint(room.getAverageOccupation(datetime(2012, 1, 1), datetime(2015, 1, 1)))
