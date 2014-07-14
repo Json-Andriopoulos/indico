@@ -19,6 +19,8 @@
 
 from pprint import pprint
 
+import transaction
+
 from dictdiffer import diff
 from sqlalchemy import exists
 
@@ -27,8 +29,8 @@ from indico.modules.rb.models.aspects import Aspect
 from indico.modules.rb.models.locations import Location
 from indico.modules.rb.models.rooms import Room
 from indico.modules.rb.models.utils import clone, getDefaultValue
-from indico.tests.python.unit.indico_tests.core_tests.db_tests.data import *
-from indico.tests.python.unit.indico_tests.core_tests.db_tests.db import DBTest
+from indico.tests.db.data import *
+from indico.tests.db.environment import DBTest
 
 
 class TestLocation(DBTest):
@@ -38,11 +40,13 @@ class TestLocation(DBTest):
             loc = Location.getLocationByName(l['name'])
             yield l, loc
             db.session.add(loc)
-        db.session.commit()
+        transaction.commit()
 
     def compare_dict_and_object(self, d, o):
         for k, v in d.items():
             assert v == getattr(o, k)
+
+#*********************************************RUNNING_WITHOUT_ERRORS***************************************************
 
     def testGetLocator(self):
         for l, loc in self.iterLocations():
@@ -118,39 +122,10 @@ class TestLocation(DBTest):
         for l, loc in self.iterLocations():
             assert loc.isMapAvailable() == ('aspects' in l)
 
-    def testGetRooms(self):
-        pass
-
-    def testAddRoom(self):
-        pass
-
-    def testDeleteRoom(self):
-        pass
-
     def testGetDefaultLocation(self):
         for l, loc in self.iterLocations():
             if 'is_default' in l:
                 assert loc == Location.getDefaultLocation()
-
-    def testSetDefaultLocation(self):
-        if len(LOCATIONS) < 2:
-            raise RuntimeWarning('Not enough locations for tis test,'
-                                 ' there should be at least 2 locations')
-        else:
-            old_default = Location.getDefaultLocation()
-            name = None
-            for l, loc in self.iterLocations():
-                if not loc.is_default:
-                    Location.setDefaultLocation(loc)
-                    db.session.commit()
-                    name = l['name']
-                    self.assertTrue(loc.is_default)
-                    break
-            assert name == Location.getDefaultLocation().name
-
-            # revert change to decrease dependency between tests
-            Location.setDefaultLocation(old_default)
-            db.session.commit()
 
     def testGetLocationByName(self):
         for l, loc in self.iterLocations():
@@ -159,33 +134,36 @@ class TestLocation(DBTest):
     def testRemoveLocationByName(self):
         test_location_name = 'test_location'
         db.session.add(Location(name=test_location_name))
-        db.session.commit()
+        transaction.commit()
 
         assert Location.getLocationByName(test_location_name) is not None
         Location.removeLocationByName(test_location_name)
-        db.session.commit()
+        transaction.commit()
         assert Location.getLocationByName(test_location_name) is None
-
-    def testAverageOccupation(self):
-        pass
-
-    def testTotalBookedTime(self):
-        pass
-
-    def testTotalBookableTime(self):
-        pass
 
     def testGetNumberOfLocations(self):
         assert len(LOCATIONS) == Location.getNumberOfLocations()
 
     def testGetNumberOfRooms(self):
         for l, loc in self.iterLocations():
-            assert len(l['rooms']) == loc.getNumberOfRooms()
+            if 'rooms' in l.keys():
+                assert len(l['rooms']) == loc.getNumberOfRooms()
+            else:
+                assert loc.getNumberOfRooms() == 0
 
     def testGetNumberOfActiveRooms(self):
         for l, loc in self.iterLocations():
             count_from_data = sum(r.get('is_active', True) for r in l.get('rooms', []))
             assert count_from_data == loc.getNumberOfActiveRooms()
+
+    def testGetRooms(self):
+        for l, loc in self.iterLocations():
+            if 'rooms' in l.keys():
+                assert len(loc.getRooms()) == len(l['rooms'])
+                for pair in zip(loc.getRooms(), l['rooms']):
+                    self.compare_dict_and_object(pair[1], pair[0])
+            else:
+                assert loc.getRooms() == []
 
     def testGetNumberOfReservableRooms(self):
         for l, loc in self.iterLocations():
@@ -205,17 +183,15 @@ class TestLocation(DBTest):
         for l, loc in self.iterLocations():
             total = sum([r.get('capacity', default_capacity)
                          for r in l.get('rooms', []) if r.get('is_reservable', True)])
-            assert total == loc.getTotalReservableCapacity()
+
+            assert total == (loc.getTotalReservableCapacity() or 0)
 
     def testGetTotalReservableSurfaceArea(self):
         for l, loc in self.iterLocations():
             total = sum([r.get('surface_area', 0)
                          for r in l.get('rooms', []) if r.get('is_reservable', True)])
-            assert total == (loc.getTotalReservableSurfaceArea() or 0)
 
-    def testGetReservationStats(self):
-        for l, loc in self.iterLocations():
-            print loc.getReservationStats()
+            assert total == (loc.getTotalReservableSurfaceArea() or 0)
 
     def testGetBuildings(self):
         for l, loc in self.iterLocations():
@@ -236,6 +212,55 @@ class TestLocation(DBTest):
             for b in loc.getBuildings():
                 k = b['number']
                 assert k in buildings
-                assert b['has_coordinates'] == buildings[k]['has_coordinates']
                 for r in b['rooms']:
-                    assert r.name in buildings[k]['rooms']
+                    assert r['name'] in buildings[k]['rooms']
+
+    def testGetReservationStats(self):
+        for l, loc in self.iterLocations():
+            num_of_reservations = 0
+            stats_num_of_resvs = 0
+            if 'rooms' in l.keys():
+                for r in l['rooms']:
+                    if 'reservations' in r.keys():
+                        num_of_reservations += len(r['reservations'])
+
+            for field in loc.getReservationStats():
+                stats_num_of_resvs += loc.getReservationStats()[field]
+
+            assert stats_num_of_resvs == num_of_reservations
+
+#**********************************************EMPTY_METHODS***********************************************************
+    def testGetAverageOccupation(self):
+        #Receiving errors from getAverageOccupation function
+        #AttributeError: 'Location' object has no attribute 'getTotalBookedTimeInLastMonth'
+        pass
+
+    def testTotalBookedTime(self):
+        for l, loc in self.iterLocations():
+            print loc.getTotalBookedTime()
+
+    def testTotalBookableTime(self):
+        #Function not implemented yet.
+        pass
+
+#******************************************************NON_RUNNING*****************************************************
+
+    def testSetDefaultLocation(self):
+        if len(LOCATIONS) < 2:
+            raise RuntimeWarning('Not enough locations for tis test,'
+                                 ' there should be at least 2 locations')
+        else:
+            old_default = Location.getDefaultLocation()
+            print old_default
+            name = None
+            for l, loc in self.iterLocations():
+                if not loc.is_default:
+                    Location.setDefaultLocation(loc)
+                    transaction.commit()
+                    name = l['name']
+                    self.assertTrue(loc.is_default)
+                    break
+            assert name == Location.getDefaultLocation().name
+            # revert change to decrease dependency between tests
+            Location.setDefaultLocation(old_default)
+            transaction.commit()
