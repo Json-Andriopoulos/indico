@@ -191,7 +191,8 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
     is_active = db.Column(
         db.Boolean,
         nullable=False,
-        default=True
+        default=True,
+        index=True
     )
     is_reservable = db.Column(
         db.Boolean,
@@ -199,9 +200,7 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
         default=True
     )
     max_advance_days = db.Column(
-        db.Integer,
-        nullable=False,
-        default=30
+        db.Integer
     )
 
     # relationships
@@ -353,17 +352,17 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
     @property
     @cached(_cache)
     def needs_video_conference_setup(self):
-        return self.has_equipment('video conference')
+        return self.has_equipment('Video conference')
 
     @property
     @cached(_cache)
     def has_webcast_recording(self):
-        return self.has_equipment('webcast/recording')
+        return self.has_equipment('Webcast/Recording')
 
     @property
     @cached(_cache)
     def has_projector(self):
-        return self.has_equipment('computer projector')
+        return self.has_equipment('Computer Projector')
 
     @property
     @cached(_cache)
@@ -374,7 +373,7 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
         vc_equipment = self.equipments \
                            .correlate(Room) \
                            .with_entities(RoomEquipment.id) \
-                           .filter_by(name='video conference') \
+                           .filter_by(name='Video conference') \
                            .as_scalar()
         return self.equipments.filter(RoomEquipment.parent_id == vc_equipment)
 
@@ -419,14 +418,14 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
         return self.name != self.generateName()
 
     def getFullName(self):
+        return self.full_name
+
+    @property
+    def full_name(self):
         if self.has_special_name:
             return u'{} - {}'.format(self.generateName(), self.name)
         else:
             return u'{}'.format(self.generateName())
-
-    @property
-    def full_name(self):
-        return self.getFullName()
 
     def updateName(self):
         if not self.name and self.building and self.floor and self.number:
@@ -480,7 +479,7 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
         if 'vc_equipment' in args or 'non_vc_equipment' in args:
             vc_id_subquery = db.session.query(RoomEquipment.id) \
                                        .correlate(Room) \
-                                       .filter_by(name='video conference') \
+                                       .filter_by(name='Video conference') \
                                        .join(RoomEquipmentAssociation) \
                                        .filter(RoomEquipmentAssociation.c.room_id == Room.id) \
                                        .as_scalar()
@@ -548,6 +547,30 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
         return Room.query.filter_by(name=name).first()
 
     @staticmethod
+    def filter_available(start_dt, end_dt, repetition, include_pre_bookings=True, include_pending_blockings=True):
+        """Returns a SQLAlchemy filter criterion ensuring that the room is available during the given time."""
+        # Check availability against reservation occurrences
+        dummy_occurrences = ReservationOccurrence.create_series(start_dt, end_dt, repetition)
+        overlap_criteria = ReservationOccurrence.filter_overlap(dummy_occurrences)
+        reservation_criteria = [Reservation.room_id == Room.id,
+                                ReservationOccurrence.is_valid,
+                                or_(*overlap_criteria)]
+        if not include_pre_bookings:
+            reservation_criteria.append(Reservation.is_confirmed)
+        occurrences_filter = Reservation.occurrences.any(and_(*reservation_criteria))
+        # Check availability against blockings
+        if include_pending_blockings:
+            valid_states = (BlockedRoom.State.accepted, BlockedRoom.State.pending)
+        else:
+            valid_states = (BlockedRoom.State.accepted,)
+        blocking_criteria = [Blocking.id == BlockedRoom.blocking_id,
+                             Blocking.start_date <= start_dt,
+                             Blocking.end_date >= end_dt,
+                             BlockedRoom.state.in_(valid_states)]
+        blockings_filter = Room.blocked_rooms.any(and_(*blocking_criteria))
+        return ~occurrences_filter & ~blockings_filter
+
+    @staticmethod
     def getRoomsForRoomList(form, avatar):
         from .locations import Location
 
@@ -577,30 +600,15 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
         )
 
         if form.available.data != -1:
-            # Check for occurrences during the given period
-            repeat_unit, repeat_step = RepeatMapping.getNewMapping(ast.literal_eval(form.repeatability.data))
-            occurrences = ReservationOccurrence.create_series(form.start_date.data, form.end_date.data,
-                                                              (repeat_unit, repeat_step))
-            overlap_criteria = ReservationOccurrence.build_overlap_criteria(occurrences)
-            reservation_criteria = [Reservation.room_id == Room.id, or_(*overlap_criteria)]
-            if not form.include_pre_bookings.data:
-                reservation_criteria.append(Reservation.is_confirmed)
-            occurrences_filter = Reservation.occurrences.any(and_(*reservation_criteria))
-            # Check for blockings during the given period
-            if form.include_pending_blockings.data:
-                valid_states = (BlockedRoom.State.accepted, BlockedRoom.State.pending)
-            else:
-                valid_states = (BlockedRoom.State.accepted,)
-            blocking_criteria = [Blocking.id == BlockedRoom.blocking_id,
-                                 Blocking.start_date <= form.end_date.data,
-                                 Blocking.end_date >= form.start_date.data,
-                                 BlockedRoom.state.in_(valid_states)]
-            blocking_filter = Room.blocked_rooms.any(and_(*blocking_criteria))
+            repetition = RepeatMapping.getNewMapping(ast.literal_eval(form.repeatability.data))
+            is_available = Room.filter_available(form.start_date.data, form.end_date.data, repetition,
+                                                 include_pre_bookings=form.include_pre_bookings.data,
+                                                 include_pending_blockings=form.include_pending_blockings.data)
             # Filter the search results
             if form.available.data == 0:  # booked/unavailable
-                q = q.filter(occurrences_filter | blocking_filter)
+                q = q.filter(~is_available)
             elif form.available.data == 1:  # available
-                q = q.filter(~occurrences_filter, ~blocking_filter)
+                q = q.filter(is_available)
 
         free_search_columns = (
             'name', 'site', 'division', 'building', 'floor', 'number', 'telephone', 'key_location', 'comments'

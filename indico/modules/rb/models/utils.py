@@ -28,7 +28,6 @@ from functools import wraps
 
 from dateutil.relativedelta import MO, TU, WE, TH, FR, SA, SU
 from dateutil.rrule import rrule, DAILY
-from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import class_mapper
 from sqlalchemy.sql import over, func
 
@@ -227,13 +226,12 @@ def stats_to_dict(results):
 
 class JSONStringBridgeMixin:
     """
-    A hybrid property to encode/decode automatically
-    a string column to JSON and vice versa.
+    A property to automatically encode/decode a string column to JSON and vice versa.
 
     Assumes mapped column name is 'raw_data'
     """
 
-    @hybrid_property
+    @property
     def value(self):
         return json.loads(self.raw_data)
 
@@ -241,23 +239,23 @@ class JSONStringBridgeMixin:
     def value(self, data):
         self.raw_data = json.dumps(data)
 
-    @hybrid_property
+    @property
     def is_value_required(self):
         return self.value.get('is_required', False)
 
-    @hybrid_property
+    @property
     def is_value_hidden(self):
         return self.value.get('is_hidden', False)
 
-    @hybrid_property
+    @property
     def is_value_used(self):
         return self.value.get('is_used', False)
 
-    @hybrid_property
+    @property
     def is_value_equipped(self):
         return self.value.get('is_equipped', False)
 
-    @hybrid_property
+    @property
     def is_value_x(self, x):
         return self.value.get('is_' + x, False)
 
@@ -272,10 +270,6 @@ def is_false_valued_dict(d):
 
 def strip_if_unicode(e):
     return e.strip() if e and isinstance(e, unicode) else e
-
-
-def get_checked_param_dict(f, params, converter=unicode):
-    return dict((k, strip_if_unicode(f.get(k, type=converter))) for k in params)
 
 
 def is_weekend(d):
@@ -301,7 +295,7 @@ def proxy_to_reservation_if_single_occurrence(f):
         resv_func = getattr(self.reservation, f.__name__)
         if not self.reservation.is_repeating:
             return resv_func(*args, **kwargs)
-        valid_occurrences = self.reservation.occurrences.filter_by(is_valid=True).all()
+        valid_occurrences = self.reservation.occurrences.filter_by(is_valid=True).limit(2).all()
         if len(valid_occurrences) == 1 and valid_occurrences[0] == self:
             # If we ever use this outside ReservationOccurrence we can probably get rid of the ==self check
             return resv_func(*args, **kwargs)

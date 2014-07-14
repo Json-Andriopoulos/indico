@@ -30,7 +30,7 @@ from indico.modules.rb.models.blockings import Blocking
 from indico.modules.rb.models.reservation_edit_logs import ReservationEditLog
 from indico.modules.rb.models.reservation_occurrences import ReservationOccurrence
 from indico.modules.rb.models.reservations import Reservation
-from indico.modules.rb.notifications.blockings import blocking_processed
+from indico.modules.rb.notifications.blockings import notify_request_response
 from indico.util.date_time import format_date
 from indico.util.string import return_ascii
 from indico.util.struct.enum import TitledIntEnum
@@ -72,7 +72,8 @@ class BlockedRoom(db.Model):
     room_id = db.Column(
         db.Integer,
         db.ForeignKey('rooms.id'),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
     @property
@@ -98,7 +99,7 @@ class BlockedRoom(db.Model):
             self.rejection_reason = reason
         if user:
             self.rejected_by = user.getFullName()
-        GenericMailer.send(GenericNotification(blocking_processed(self)))
+        notify_request_response(self)
 
     def approve(self, notify_blocker=True):
         """Approve the room blocking, rejecting all colliding reservations/occurrences."""
@@ -137,29 +138,19 @@ class BlockedRoom(db.Model):
         for reservation in reservations:
             if self.blocking.can_be_overridden(reservation.created_by_user, reservation.room):
                 continue
-            reservation.reject(reason)
-            log_msg = 'Booking rejected: {}'.format(reason)
-            reservation.add_edit_log(ReservationEditLog(user_name=self.blocking.created_by_user.getFullName(),
-                                                        info=log_msg))
-            emails += reservation.notify_rejection(reason)
+            reservation.reject(self.blocking.created_by_user, reason)
 
         for occurrence in occurrences:
             reservation = occurrence.reservation
             if self.blocking.can_be_overridden(reservation.created_by_user, reservation.room):
                 continue
-            occurrence.reject(reason)
-            log_msg = 'Booking occurrence on {} rejected: {}'.format(format_date(occurrence.date), reason)
-            reservation.add_edit_log(ReservationEditLog(user_name=self.blocking.created_by_user.getFullName(),
-                                                        info=log_msg))
-            emails += occurrence.notify_rejection(reason)
+            occurrence.reject(self.blocking.created_by_user, reason)
 
         if notify_blocker:
             # We only need to notify the blocking creator if the blocked room wasn't approved yet.
             # This is the case if it's a new blocking for a room managed by the creator
-            emails.append(blocking_processed(self))
+            notify_request_response(self)
 
-        for notification in map(GenericNotification, emails):
-            GenericMailer.send(notification)
 
     @return_ascii
     def __repr__(self):

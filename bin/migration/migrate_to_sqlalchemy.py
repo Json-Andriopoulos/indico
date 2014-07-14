@@ -97,20 +97,12 @@ def setup(main_zodb_uri, rb_zodb_uri, sqlalchemy_uri):
     return main_root, rb_root, app
 
 
-def teardown():
-    pass
-
-
 def convert_reservation_repeatability(old):
     return RepeatMapping.getNewMapping(old)
 
 
 def convert_room_notification_for_start(flag, before):
     return before if flag else 0
-
-
-def convert_room_max_advance_days(old):
-    return int(old) if old else 30
 
 
 def generate_name(old_room):
@@ -219,8 +211,8 @@ def migrate_rooms(rb_root, photo_path):
     eq = defaultdict(set)
     vc = defaultdict(set)
     for old_room_id, old_room in rb_root['Rooms'].iteritems():
-        eq[old_room._locationName].update(e.lower() for e in old_room._equipment.split('`') if e)
-        vc[old_room._locationName].update(e.lower() for e in getattr(old_room, 'avaibleVC', []) if e)
+        eq[old_room._locationName].update(e for e in old_room._equipment.split('`') if e)
+        vc[old_room._locationName].update(e for e in getattr(old_room, 'avaibleVC', []) if e)
 
     print cformat('%{white!}migrating equipment')
     for name, eqs in eq.iteritems():
@@ -234,12 +226,12 @@ def migrate_rooms(rb_root, photo_path):
     print cformat('%{white!}migrating vc equipment')
     for name, vcs in vc.iteritems():
         l = Location.getLocationByName(name)
-        pvc = l.getEquipmentByName('video conference')
+        pvc = l.getEquipmentByName('Video conference')
         for vc_name in vcs:
-            re = RoomEquipment(name=vc_name)
-            re.parent = pvc
-            l.equipment_objects.append(re)
-            print cformat('- [%{cyan}{}%{reset}] {}').format(name, re.name)
+            req = RoomEquipment(name=vc_name)
+            req.parent = pvc
+            l.equipment_objects.append(req)
+            print cformat('- [%{cyan}{}%{reset}] {}').format(name, req.name)
         db.session.add(l)
     db.session.commit()
     print
@@ -280,7 +272,7 @@ def migrate_rooms(rb_root, photo_path):
 
             is_active=old_room.isActive,
             is_reservable=old_room.isReservable,
-            max_advance_days=convert_room_max_advance_days(old_room.maxAdvanceDays)
+            max_advance_days=int(old_room.maxAdvanceDays) if old_room.maxAdvanceDays else None
         )
 
         print cformat('- [%{cyan}{}%{reset}] %{grey!}{:4}%{reset}  %{green!}{}%{reset}').format(l.name, r.id, r.name)
@@ -323,7 +315,7 @@ def migrate_rooms(rb_root, photo_path):
                 print cformat('  %{blue!}Photos')
 
         new_eq = []
-        for old_equipment in ifilter(None, (e.lower() for e in old_room._equipment.split('`'))):
+        for old_equipment in ifilter(None, old_room._equipment.split('`') + old_room.avaibleVC):
             room_eq = l.getEquipmentByName(old_equipment)
             new_eq.append(room_eq)
             r.equipments.append(room_eq)
@@ -386,7 +378,7 @@ def migrate_reservations(rb_root):
         )
 
         for eq_name in getattr(v, 'useVC', []):
-            eq = l.getEquipmentByName(eq_name.lower())
+            eq = l.getEquipmentByName(eq_name)
             if eq:
                 r.equipments.append(eq)
 

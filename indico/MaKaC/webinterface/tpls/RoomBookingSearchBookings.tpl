@@ -83,26 +83,6 @@
             </div>
         </div>
 
-        % if user_has_rooms:
-        <div class="toolbar thin table">
-            <div class="group i-selection">
-                <span class="i-button label">
-                    ${ _('Rooms') }
-                </span>
-                <input type="radio" id="any_room" name="is_only_my_rooms" value="false" checked/>
-                <label for="any_room" class="i-button"
-                    title="${ _('Shows all the rooms') }">
-                    ${ _('Any room') }
-                </label>
-                <input type="radio" id="only_my_rooms" name="is_only_my_rooms" value="true"/>
-                <label for="only_my_rooms" class="i-button"
-                    title="${ _('Filter by bookings of rooms you are taking care of') }">
-                    ${ _('My rooms') }
-                </label>
-            </div>
-        </div>
-        % endif
-
         <div class="toolbar thin table">
             <div class="group i-selection">
                 <span class="i-button label">
@@ -218,15 +198,6 @@
         e.datepicker('setDate', '+7');
     }
 
-    function confirm_search() {
-        if ($('#is_only_mine').is(':checked') || $('#roomIDList').val() !== null) {
-            return true;
-        }
-        try { if ($('#is_only_my_rooms').is(':checked')) { return true; } } catch (err) {}
-        new AlertPopup($T('Select room'), $T('Please select a room (or several rooms).')).open();
-        return false;
-    }
-
     // Reads out the invalid textboxes and returns false if something is invalid.
     // Returns true if form may be submited.
     function forms_are_valid(onSubmit) {
@@ -267,7 +238,8 @@
                 new AlertPopup($T('Error'), $T('There are errors in the form. Please correct fields with red background.')).open();
                 e.preventDefault();
             }
-            else if(!confirm_search()) {
+            else if(!$('#roomselector').roomselector('validate')) {
+                new AlertPopup($T('Select room'), $T('Please select a room (or several rooms).')).open();
                 e.preventDefault();
             }
         });

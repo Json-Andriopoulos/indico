@@ -46,11 +46,13 @@ class ReservationOccurrence(db.Model, Serializer):
     start = db.Column(
         db.DateTime,
         nullable=False,
-        primary_key=True
+        primary_key=True,
+        index=True
     )
     end = db.Column(
         db.DateTime,
-        nullable=False
+        nullable=False,
+        index=True
     )
     is_sent = db.Column(
         db.Boolean,
@@ -143,7 +145,7 @@ class ReservationOccurrence(db.Model, Serializer):
         raise IndicoError('Unexpected frequency')
 
     @staticmethod
-    def build_overlap_criteria(occurrences):
+    def filter_overlap(occurrences):
         criteria = []
         for occurrence in occurrences:
             criteria += [
@@ -161,7 +163,7 @@ class ReservationOccurrence(db.Model, Serializer):
         return ReservationOccurrence.find(Reservation.room == room,
                                           Reservation.id != reservation_id,
                                           ReservationOccurrence.is_valid,
-                                          ReservationOccurrence.build_overlap_criteria(occurrences),
+                                          ReservationOccurrence.filter_overlap(occurrences),
                                           _eager=ReservationOccurrence.reservation,
                                           _join=Reservation)
 
@@ -242,24 +244,27 @@ class ReservationOccurrence(db.Model, Serializer):
         return date_time.get_overlap((self.start, self.end), (occurrence.start, occurrence.end))
 
     @proxy_to_reservation_if_single_occurrence
-    def cancel(self, user, reason=None, log=True):
+    def cancel(self, user, reason=None, silent=False):
         self.is_cancelled = True
         self.rejection_reason = reason
-        if log:
+        if not silent:
             log_msg = 'Day cancelled: {}'.format(format_date(self.date))
             self.reservation.add_edit_log(ReservationEditLog(user_name=user.getFullName(), info=[log_msg]))
+            # Notification sent only when the reservation is still valid
+            if self.reservation.occurrences.filter_by(is_valid=True).count():
+                from indico.modules.rb.notifications.reservation_occurrences import notify_cancellation
+                notify_cancellation(self)
+
 
     @proxy_to_reservation_if_single_occurrence
-    def reject(self, user, reason, log=True):
+    def reject(self, user, reason, silent=False):
         self.is_rejected = True
         self.rejection_reason = reason
-        if log:
+        if not silent:
             log = ['Day rejected: {}'.format(format_date(self.date)),
                    'Reason: {}'.format(reason)]
             self.reservation.add_edit_log(ReservationEditLog(user_name=user.getFullName(), info=log))
-
-    def notify_cancellation(self):
-        return self.reservation.notify_cancellation(self.date)
-
-    def notify_rejection(self, reason=''):
-        return self.reservation.notify_rejection(reason, self.date)
+            # Notification sent only when the reservation is still valid
+            if self.reservation.occurrences.filter_by(is_valid=True).count():
+                from indico.modules.rb.notifications.reservation_occurrences import notify_rejection
+                notify_rejection(self)

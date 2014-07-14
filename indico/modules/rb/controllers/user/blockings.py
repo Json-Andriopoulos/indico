@@ -25,7 +25,7 @@ from flask import request, session
 from indico.modules.rb.forms.base import FormDefaults
 from indico.modules.rb.forms.blockings import CreateBlockingForm, BlockingForm
 from indico.modules.rb.models.blocking_principals import BlockingPrincipal
-from indico.modules.rb.notifications.blockings import request_confirmation
+from indico.modules.rb.notifications.blockings import notify_request
 from indico.util.i18n import _
 from indico.core.db import db
 from indico.core.errors import IndicoError
@@ -35,8 +35,6 @@ from indico.modules.rb.models.blocked_rooms import BlockedRoom
 from indico.modules.rb.models.blockings import Blocking
 from indico.modules.rb.views.user.blockings import (WPRoomBookingBlockingList, WPRoomBookingBlockingDetails,
                                                     WPRoomBookingBlockingsForMyRooms, WPRoomBookingBlockingForm)
-from MaKaC.common.mail import GenericMailer
-from MaKaC.webinterface.mail import GenericNotification
 
 
 class RHRoomBookingBlockingDetails(RHRoomBookingBase):
@@ -68,7 +66,7 @@ class RHRoomBookingCreateModifyBlockingBase(RHRoomBookingBase):
                 rooms_by_owner[owner].append(blocked_room)
 
         for owner, rooms in rooms_by_owner.iteritems():
-            GenericMailer.send(GenericNotification(request_confirmation(owner, self._blocking, rooms)))
+            notify_request(owner, self._blocking, rooms)
 
 
 class RHRoomBookingCreateBlocking(RHRoomBookingCreateModifyBlockingBase):
@@ -180,7 +178,7 @@ class RHRoomBookingBlockingsForMyRooms(RHRoomBookingBase):
     def _process(self):
         state = BlockedRoom.State.get(self.state)
         my_blocks = defaultdict(list)
-        for room in self._getUser().getRooms():
+        for room in session.user.getRooms():
             roomBlocks = room.blocked_rooms.filter(True if state is None else BlockedRoom.state == state).all()
             if roomBlocks:
                 my_blocks[room] += roomBlocks

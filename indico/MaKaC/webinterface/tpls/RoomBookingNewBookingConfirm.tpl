@@ -24,11 +24,13 @@
     <i class="icon-calendar"></i>
     ${ _('Booking Time & Date') }
 </h2>
-<div class="info-message-box">
-    <div class="message-text">
-        ${ _('This room can only be booked {0} days in advance'.format(room.max_advance_days)) }
+% if room.max_advance_days:
+    <div class="info-message-box">
+        <div class="message-text">
+            ${ _('This room can only be booked {0} days in advance'.format(room.max_advance_days)) }
+        </div>
     </div>
-</div>
+%endif
 <table>
     <tr>
         <td class="subFieldWidth" align="right" valign="top" style="padding-right: 5px;">
@@ -78,11 +80,13 @@
     </h2>
     <%include file="RoomBookingNewBookingInfoWidget.tpl" args="form=form"/>
 
-    <h2 class="group-title">
-        <i class="icon-projector"></i>
-        ${ _('Collaboration & Assistance') }
-    </h2>
-    <%include file="RoomBookingNewBookingCollaborationWidget.tpl" args="form=form"/>
+    % if list(form.equipments) or form.needs_general_assistance:
+        <h2 class="group-title">
+            <i class="icon-projector"></i>
+            ${ _('Collaboration & Assistance') }
+        </h2>
+        <%include file="RoomBookingNewBookingCollaborationWidget.tpl" args="form=form"/>
+    % endif
 
     <h2 class="group-title"></h2>
     <%include file="RoomBookingNewBookingConflictsWidget.tpl" args="form=form"/>

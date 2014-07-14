@@ -254,7 +254,7 @@
                             ${ _('Maximum advance time') }&nbsp;&nbsp;
                           </td>
                           <td align="left" class="blacktext">
-                            ${ _('{0} days').format(room.max_advance_days) }
+                            ${ _('{0} days').format(room.max_advance_days) if room.max_advance_days else _('Not set') }
                           </td>
                         </tr>
                         <tr>
@@ -322,8 +322,10 @@
                                 ${ _('Room has') }:&nbsp;&nbsp;
                               </td>
                               <td align="left" class="blacktext">
-                                <!-- TODO: Show nested equipment nicely, e.g. VC children. Needs a helper function! -->
-                                ${ ', '.join(eq.name.title() for eq in room.equipments) }
+                                <%
+                                from indico.util.struct.iterables import render_nested
+                                %>
+                                ${ render_nested(sorted(room.equipments, key=lambda x: x.name)) }
                               </td>
                             </tr>
                           </table>
@@ -356,7 +358,9 @@
                       </tr>
                       <tr>
                         <td colspan="3">
-                          <div id="roomBookingCal"></div>
+                          <div id="roomBookingCal" style="margin-top: 40px;">
+                              ${ calendar }
+                          </div>
                     </td>
                   </tr>
                 </table>
@@ -365,11 +369,3 @@
           </td>
         </tr>
 </table>
-
-<script type="text/javascript">
-    var roomBookingCalendar = new RoomBookingCalendar(
-        ${ jsonEncode(barsFossil) },
-        ${ jsonEncode(dayAttrs) }
-    );
-    $E('roomBookingCal').set(roomBookingCalendar.draw());
-</script>

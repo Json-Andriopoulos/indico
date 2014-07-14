@@ -21,11 +21,12 @@ from datetime import datetime, time, timedelta, date
 from collections import defaultdict
 
 import dateutil
-from flask import request, session
+import transaction
+from flask import request, session, jsonify
 from werkzeug.datastructures import MultiDict
 
 from indico.core.db import db
-from indico.core.errors import IndicoError, AccessError
+from indico.core.errors import IndicoError, AccessError, NoReportError, NotFoundError
 from indico.modules.rb.forms.base import FormDefaults
 from indico.util.date_time import get_datetime_from_request
 from indico.util.string import natural_sort_key
@@ -55,8 +56,7 @@ class RHRoomBookingBookingMixin:
 
 class RHRoomBookingBookingDetails(RHRoomBookingBookingMixin, RHRoomBookingBase):
     def _process(self):
-        is_new_booking = request.values.get('new_booking', type=bool, default=False)
-        return WPRoomBookingBookingDetails(self, is_new_booking=is_new_booking).display()
+        return WPRoomBookingBookingDetails(self).display()
 
 
 class RHRoomBookingAcceptBooking(RHRoomBookingBookingMixin, RHRoomBookingBase):
@@ -68,8 +68,9 @@ class RHRoomBookingAcceptBooking(RHRoomBookingBookingMixin, RHRoomBookingBase):
     def _process(self):
         if self._reservation.find_overlapping().filter(Reservation.is_confirmed).count():
             raise IndicoError("This reservation couldn't be accepted due to conflicts with other reservations")
-        self._reservation.accept(session.user)
-        # TODO add flash message
+        if self._reservation.is_pending:
+            self._reservation.accept(session.user)
+            # TODO add flash message
         self._redirect(url_for('rooms.roomBooking-bookingDetails', self._reservation))
 
 
@@ -80,8 +81,9 @@ class RHRoomBookingCancelBooking(RHRoomBookingBookingMixin, RHRoomBookingBase):
             raise IndicoError("You are not authorized to perform this action")
 
     def _process(self):
-        self._reservation.cancel(session.user)
-        # TODO add flash message
+        if not self._reservation.is_cancelled and not self._reservation.is_rejected:
+            self._reservation.cancel(session.user)
+            # TODO add flash message
         self._redirect(url_for('rooms.roomBooking-bookingDetails', self._reservation))
 
 
@@ -96,8 +98,9 @@ class RHRoomBookingRejectBooking(RHRoomBookingBookingMixin, RHRoomBookingBase):
             raise IndicoError("You are not authorized to perform this action")
 
     def _process(self):
-        self._reservation.reject(session.user, self._reason)
-        # TODO add flash message
+        if not self._reservation.is_cancelled and not self._reservation.is_rejected:
+            self._reservation.reject(session.user, self._reason)
+            # TODO add flash message
         self._redirect(url_for('rooms.roomBooking-bookingDetails', self._reservation))
 
 
@@ -113,8 +116,9 @@ class RHRoomBookingCancelBookingOccurrence(RHRoomBookingBookingMixin, RHRoomBook
             raise IndicoError("You are not authorized to perform this action")
 
     def _process(self):
-        self._occurrence.cancel(session.user)
-        # TODO add flash message
+        if self._occurrence.is_valid:
+            self._occurrence.cancel(session.user)
+            # TODO add flash message
         self._redirect(url_for('rooms.roomBooking-bookingDetails', self._reservation))
 
 
@@ -131,16 +135,21 @@ class RHRoomBookingRejectBookingOccurrence(RHRoomBookingBookingMixin, RHRoomBook
             raise IndicoError("You are not authorized to perform this action")
 
     def _process(self):
-        self._occurrence.reject(session.user, self._reason)
-        # TODO add flash message
+        if self._occurrence.is_valid:
+            self._occurrence.reject(session.user, self._reason)
+            # TODO add flash message
         self._redirect(url_for('rooms.roomBooking-bookingDetails', self._reservation))
 
 
 class RHRoomBookingSearchBookings(RHRoomBookingBase):
     menu_item = 'bookingListSearch'
+    show_blockings = True
 
     def _get_form_data(self):
         return request.form
+
+    def _filter_displayed_rooms(self, rooms, occurrences):
+        return rooms
 
     def _checkParams(self):
         self._rooms = sorted(Room.find_all(is_active=True), key=lambda r: natural_sort_key(r.getFullName()))
@@ -155,8 +164,10 @@ class RHRoomBookingSearchBookings(RHRoomBookingBase):
         form = self._form
         if self._is_submitted() and form.validate():
             occurrences = ReservationOccurrence.find_with_filters(form.data, session.user).all()
-            rooms = [r for r in self._rooms if r.id in set(form.room_ids.data)]
+            rooms = self._filter_displayed_rooms([r for r in self._rooms if r.id in set(form.room_ids.data)],
+                                                 occurrences)
             return WPRoomBookingSearchBookingsResults(self, rooms=rooms, occurrences=occurrences,
+                                                      show_blockings=self.show_blockings,
                                                       start_dt=form.start_dt.data, end_dt=form.end_dt.data,
                                                       form=form, form_data=self._form_data,
                                                       menu_item=self.menu_item).display()
@@ -168,6 +179,7 @@ class RHRoomBookingSearchBookings(RHRoomBookingBase):
 class RHRoomBookingSearchBookingsShortcutBase(RHRoomBookingSearchBookings):
     """Base class for searches with predefined criteria"""
     search_criteria = {}
+    show_blockings = False
 
     def _is_submitted(self):
         return True
@@ -187,14 +199,25 @@ class RHRoomBookingSearchBookingsShortcutBase(RHRoomBookingSearchBookings):
         return data
 
 
-class RHRoomBookingSearchMyBookings(RHRoomBookingSearchBookingsShortcutBase):
+class _RoomsWithBookingsMixin:
+    def _filter_displayed_rooms(self, rooms, occurrences):
+        booked_rooms = {occ.reservation.room_id for occ in occurrences}
+        return [r for r in rooms if r.id in booked_rooms]
+
+
+class _MyRoomsMixin:
+    def _filter_displayed_rooms(self, rooms, occurrences):
+        return [r for r in rooms if r.owner_id == session.user.id]
+
+
+class RHRoomBookingSearchMyBookings(_RoomsWithBookingsMixin, RHRoomBookingSearchBookingsShortcutBase):
     menu_item = 'myBookingList'
     search_criteria = {
         'is_only_mine': True
     }
 
 
-class RHRoomBookingSearchMyPendingBookings(RHRoomBookingSearchBookingsShortcutBase):
+class RHRoomBookingSearchMyPendingBookings(_RoomsWithBookingsMixin, RHRoomBookingSearchBookingsShortcutBase):
     menu_item = 'myPendingBookingList'
     search_criteria = {
         'is_only_mine': True,
@@ -202,14 +225,14 @@ class RHRoomBookingSearchMyPendingBookings(RHRoomBookingSearchBookingsShortcutBa
     }
 
 
-class RHRoomBookingSearchBookingsMyRooms(RHRoomBookingSearchBookingsShortcutBase):
+class RHRoomBookingSearchBookingsMyRooms(_MyRoomsMixin, RHRoomBookingSearchBookingsShortcutBase):
     menu_item = 'usersBookings'
     search_criteria = {
         'is_only_my_rooms': True
     }
 
 
-class RHRoomBookingSearchPendingBookingsMyRooms(RHRoomBookingSearchBookingsShortcutBase):
+class RHRoomBookingSearchPendingBookingsMyRooms(_MyRoomsMixin, RHRoomBookingSearchBookingsShortcutBase):
     menu_item = 'usersPendingBookings'
     search_criteria = {
         'is_only_my_rooms': True,
@@ -226,6 +249,9 @@ class RHRoomBookingNewBookingBase(RHRoomBookingBase):
             form = form_class(formdata=MultiDict(), obj=defaults)
         else:
             form = form_class(obj=defaults)
+
+        if not room.notification_for_assistance:
+            del form.needs_general_assistance
 
         can_book = room.can_be_booked(session.user)
         can_prebook = room.can_be_prebooked(session.user)
@@ -304,10 +330,21 @@ class RHRoomBookingNewBookingBase(RHRoomBookingBase):
         db.session.flush()
         return reservation
 
+    def _create_booking_response(self, form, room):
+        """Creates the booking and returns a JSON response."""
+        try:
+            booking = self._create_booking(form, room)
+        except NoReportError as e:
+            transaction.abort()
+            return jsonify(success=False, msg=unicode(e))
+        return jsonify(success=True, url=url_for('rooms.roomBooking-bookingDetails', booking))
+
 
 class RHRoomBookingNewBookingSimple(RHRoomBookingNewBookingBase):
     def _checkParams(self):
         self._room = Room.get(int(request.view_args['roomID']))
+        if self._room is None:
+            raise NotFoundError('This room does not exist')
 
     def _make_form(self):
         if 'start_date' in request.args:
@@ -339,9 +376,7 @@ class RHRoomBookingNewBookingSimple(RHRoomBookingNewBookingBase):
             conflicts, pre_conflicts = self._get_all_conflicts(self._room, form)
 
         if form.validate_on_submit() and not form.submit_check.data:
-            booking = self._create_booking(form, room)
-            self._redirect(url_for('rooms.roomBooking-bookingDetails', booking, new_booking=True))
-            return
+            return self._create_booking_response(form, room)
 
         can_override = room.can_be_overriden(session.user)
         return WPRoomBookingNewBookingSimple(self, form=form, room=room, rooms=rooms,
@@ -464,9 +499,7 @@ class RHRoomBookingNewBooking(RHRoomBookingNewBookingBase):
         if not room.can_be_booked(session.user) and not room.can_be_prebooked(session.user):
             raise IndicoError('You cannot book this room')
         if form.validate_on_submit():
-            booking = self._create_booking(form, room)
-            self._redirect(url_for('rooms.roomBooking-bookingDetails', booking, new_booking=True))
-            return
+            return self._create_booking_response(form, room)
         # There was an error in the form
         return self._show_confirm(room, form)
 
@@ -501,10 +534,13 @@ class RHRoomBookingModifyBooking(RHRoomBookingBookingMixin, RHRoomBookingNewBook
             conflicts, pre_conflicts = self._get_all_conflicts(room, form, self._reservation.id)
 
         if form.validate_on_submit() and not form.submit_check.data:
-            if self._reservation.modify(form.data, session.user):
+            try:
+                self._reservation.modify(form.data, session.user)
                 # TODO: flash success message
-                pass
-            self._redirect(url_for('rooms.roomBooking-bookingDetails', self._reservation))
+            except NoReportError as e:
+                transaction.abort()
+                return jsonify(success=False, msg=unicode(e))
+            return jsonify(success=True, url=url_for('rooms.roomBooking-bookingDetails', self._reservation))
 
         return WPRoomBookingModifyBooking(self, form=form, room=room, rooms=Room.find_all(), occurrences=occurrences,
                                           candidates=candidates, conflicts=conflicts, pre_conflicts=pre_conflicts,

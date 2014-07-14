@@ -17,7 +17,7 @@
 ## You should have received a copy of the GNU General Public License
 ## along with Indico.  If not, see <http://www.gnu.org/licenses/>.
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 
 from flask import request, session
 from werkzeug.datastructures import MultiDict
@@ -29,7 +29,8 @@ from indico.modules.rb.controllers.decorators import requires_location, requires
 from indico.modules.rb.forms.base import FormDefaults
 from indico.modules.rb.forms.rooms import SearchRoomsForm
 from indico.modules.rb.models.locations import Location
-from indico.modules.rb.models.reservations import RepeatUnit
+from indico.modules.rb.models.reservation_occurrences import ReservationOccurrence
+from indico.modules.rb.models.reservations import RepeatMapping, RepeatUnit, Reservation
 from indico.modules.rb.models.rooms import Room
 from indico.modules.rb.models.room_equipments import RoomEquipment
 from indico.modules.rb.models.utils import next_work_day
@@ -53,33 +54,25 @@ class RHRoomBookingMapOfRoomsWidget(RHRoomBookingBase):
         self._cache = GenericCache('MapOfRooms')
 
     def _checkParams(self):
-        session['_rb_default_start'] = session['_rb_default_end'] = next_work_day()
-        session['_rb_default_repeatability'] = (RepeatUnit.NEVER, 0)
         RHRoomBookingBase._checkParams(self, request.args)
         self._room_id = request.args.get('roomID')
-
-    def _businessLogic(self):
-        defaultLocation = Location.getDefaultLocation()
-        self._default_location_name = defaultLocation.name
-        self._aspects = defaultLocation.getAspectsAsDictionary()
-        self._for_video_conference = request.args.get('avc') == 'y' and \
-                                     defaultLocation.hasEquipment('Video conference')
-        self._buildings = defaultLocation.getBuildings(not self._for_video_conference)
 
     def _process(self):
         key = str(sorted(dict(request.args, lang=session.lang, user=session.user.getId()).items()))
         html = self._cache.get(key)
         if not html:
-            self._businessLogic()
-            page = WPRoomBookingMapOfRoomsWidget(
-                self,
-                self._aspects,
-                self._buildings,
-                self._default_location_name,
-                self._for_video_conference,
-                self._room_id
-            )
-            html = page.display()
+            default_location = Location.getDefaultLocation()
+            aspects = default_location.getAspectsAsDictionary()
+            for_video_conference = request.args.get('avc') == 'y' and default_location.hasEquipment('Video conference')
+            buildings = default_location.getBuildings(with_rooms=not for_video_conference)
+            html = WPRoomBookingMapOfRoomsWidget(self,
+                                                 aspects=aspects,
+                                                 buildings=buildings,
+                                                 room_id=self._room_id,
+                                                 default_repeat=(RepeatUnit.NEVER, 0),
+                                                 default_start_dt=datetime.combine(next_work_day(), time(8)),
+                                                 default_end_dt=datetime.combine(next_work_day(), time(17)),
+                                                 repeat_mapping=RepeatMapping.getMapping()).display()
             self._cache.set(key, html, 3600)
         return html
 
@@ -138,40 +131,35 @@ class RHRoomBookingSearch4Rooms(RHRoomBookingBase):
 
 
 class RHRoomBookingRoomDetails(RHRoomBookingBase):
-    def _setGeneralDefaultsInSession(self):
-        now = datetime.now()
-
-        # if it's saturday or sunday, postpone for monday as a default
-        if now.weekday() in [5, 6]:
-            now = now + timedelta(7 - now.weekday())
-
-        session["rbDefaultStartDT"] = datetime(now.year, now.month, now.day, 0, 0)
-        session["rbDefaultEndDT"] = datetime(now.year, now.month, now.day, 0, 0)
-
     @requires_location
     @requires_room
     def _checkParams(self):
         self._target = self._room
 
+        # TODO: flash() messages instead!!!
         self._afterActionSucceeded = session.get('rbActionSucceeded')
         self._afterDeletionFailed = session.get('rbDeletionFailed')
 
-        self._searching_start = self._searching_end = None
-        if 'calendarMonths' in request.args:
-            self._searching_start = session.get('rbDefaultStartDT')
-            self._searching_end = session.get('rbDefaultEndDT')
-
-        # locator = WebLocator()
-        # locator.setRoom(request.args)
-        # self._setGeneralDefaultsInSession()
-        # self._room = self._target = locator.getObject()
-
-        # self._formMode = session.get('rbFormMode')
-
-        # self._clearSessionState()
+        self._calendar_start = next_work_day()
+        self._calendar_end = datetime.combine(self._calendar_start, time(23, 59))
+        try:
+            preview_months = int(request.args.get('preview_months', '0'))
+        except (TypeError, ValueError):
+            preview_months = 0
+        self._calendar_end += timedelta(days=31 * preview_months)
 
     def _process(self):
-        return WPRoomBookingRoomDetails(self).display()
+        occurrences = ReservationOccurrence.find_all(
+            Reservation.room_id == self._room.id,
+            ReservationOccurrence.start >= self._calendar_start,
+            ReservationOccurrence.end <= self._calendar_end,
+            ReservationOccurrence.is_valid,
+            _join=Reservation,
+            _eager=ReservationOccurrence.reservation
+        )
+
+        return WPRoomBookingRoomDetails(self, room=self._room, start_dt=self._calendar_start, end_dt=self._calendar_end,
+                                        occurrences=occurrences).display()
 
 
 # TODO

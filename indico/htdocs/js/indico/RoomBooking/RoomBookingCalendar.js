@@ -83,7 +83,7 @@ type ("RoomBookingRoom", [],
             this.number = roomData.number;
             this.floor = roomData.floor;
             this.building = roomData.building;
-            this.location_name = roomData.location_data;
+            this.location_name = roomData.location_name;
             this.name = roomData.name;
             this.type = roomData.kind;
             this.details_url = roomData.details_url;
@@ -552,7 +552,7 @@ type ("RoomBookingManyRoomsCalendarDrawer", ["RoomBookingCalendarDrawer"],
                     days.push(self.drawDay(day, highlight));
                 });
 
-                return this.data.days.length != 0 ? Html.div({},days) : Html.div({style:{width:pixels(700), margin: '2em auto'}, className: 'infoMessage'}, $T('No results found in the given period of time. Please change period.'));
+                return this.data.days.length != 0 ? Html.div({},days) : Html.div({style:{width:pixels(700), margin: '2em auto'}, className: 'infoMessage'}, $T('No results found in the given period of time.'));
             }
         },
         /**
@@ -621,10 +621,11 @@ type ("RoomBookingSingleRoomCalendarDrawer", ["RoomBookingCalendarDrawer"],
 
             drawHeader: function(){
                 if (this.room)
+                    var detailsUrl = build_url(this.room.details_url, {preview_months: 3});
                     var singleDayHeader = Html.div({
                         className:"bookingTitle",
-                        style:{marginBottom: pixels(20), marginTop: pixels(18)}
-                    }, Html.a({href:this.room.details_url, style:{paddingLeft: pixels(5), fontSize:"x-small"}}, $T("( show 3 months preview )" )));
+                        style:{marginBottom: pixels(20), marginTop: pixels(18), padding: 0}
+                    }, Html.a({href:detailsUrl, style:{paddingLeft: pixels(5), fontSize:"x-small"}}, $T("( show 3 months preview )" )));
                 return Html.div({}, singleDayHeader, this.RoomBookingCalendarDrawer.prototype.drawHeader.call(this));
             },
             /**
