@@ -28,6 +28,13 @@ from indico.modules.rb.models.reservations import RepeatUnit
 def _create_utc_dt(*args):
     return timezone('UTC').localize(datetime(*args))
 
+LIVE_START_DATE = datetime(2014, 01, 01, 10)
+LIVE_END_DATE = datetime(2015, 01, 01, 14)
+
+NO_RESERVATION_PERIODS = [(datetime(2010, 01, 01, 10), LIVE_START_DATE),
+                          (LIVE_END_DATE, datetime(2016, 01, 01, 01))]
+RESERVATION_PERIODS = [(LIVE_START_DATE, LIVE_END_DATE)]
+
 
 BLOCKING_PRINCIPALS = [
     {
@@ -108,9 +115,10 @@ RESERVATION_NOTIFICATIONS = [
 RESERVATIONS = [
     {
         'created_at': _create_utc_dt(2013, 12, 2, 11, 30),
-        'start_date': datetime(2013, 12, 5, 10),
-        'end_date': datetime(2013, 12, 5, 12),
-        'repeat_unit': RepeatUnit.NEVER,
+        'start_date': LIVE_START_DATE,
+        'end_date': LIVE_END_DATE,
+        'repeat_unit': RepeatUnit.MONTH,
+        'repeat_step': 1,
         'booked_for_id': 'admin',
         'booked_for_name': 'admin',
         'created_by': 'admin',
@@ -121,8 +129,8 @@ RESERVATIONS = [
     },
     {
         'created_at': _create_utc_dt(2013, 11, 2, 11, 30),
-        'start_date': datetime(2013, 12, 1, 8),
-        'end_date': datetime(2013, 12, 30, 10),
+        'start_date': LIVE_START_DATE,
+        'end_date': LIVE_END_DATE,
         'repeat_unit': RepeatUnit.WEEK,
         'repeat_step': 1,
         'booked_for_id': 'admin',
@@ -135,8 +143,8 @@ RESERVATIONS = [
     },
     {
         'created_at': _create_utc_dt(2013, 11, 30, 17),
-        'start_date': datetime(2013, 12, 1, 15),
-        'end_date': datetime(2014, 12, 1, 15),
+        'start_date': LIVE_START_DATE,
+        'end_date': LIVE_END_DATE,
         'repeat_unit': RepeatUnit.MONTH,
         'repeat_step': 1,
         'booked_for_id': 'admin',
@@ -148,9 +156,10 @@ RESERVATIONS = [
     },
     {
         'created_at': _create_utc_dt(2013, 12, 1, 11, 30),
-        'start_date': datetime(2013, 12, 1, 12),
-        'end_date': datetime(2013, 12, 2, 14),
+        'start_date': LIVE_START_DATE,
+        'end_date': LIVE_END_DATE,
         'repeat_unit': RepeatUnit.NEVER,
+        'repeat_step': 1,
         'booked_for_id': 'tim',
         'booked_for_name': 'tim ferref',
         'created_by': 'admin',
@@ -161,9 +170,10 @@ RESERVATIONS = [
     },
     {
         'created_at': _create_utc_dt(2013, 12, 20),
-        'start_date': datetime(2014, 1, 1, 8),
-        'end_date': datetime(2014, 1, 1, 12),
+        'start_date': LIVE_START_DATE,
+        'end_date': LIVE_END_DATE,
         'repeat_unit': RepeatUnit.NEVER,
+        'repeat_step': 1,
         'booked_for_id': 'john',
         'booked_for_name': 'john kusack',
         'created_by': 'john',
@@ -174,9 +184,10 @@ RESERVATIONS = [
     },
     {
         'created_at': _create_utc_dt(2012, 1, 1, 12),
-        'start_date': datetime(2013, 12, 5, 10),
-        'end_date': datetime(2013, 12, 5, 12),
+        'start_date': LIVE_START_DATE,
+        'end_date': LIVE_END_DATE,
         'repeat_unit': RepeatUnit.NEVER,
+        'repeat_step': 1,
         'booked_for_id': 'fred',
         'booked_for_name': 'fred williams',
         'created_by': 'frankenstein',
@@ -186,9 +197,10 @@ RESERVATIONS = [
     },
     {
         'created_at': _create_utc_dt(2008, 3, 3, 3, 3, 3),
-        'start_date': datetime(2013, 12, 5, 10),
-        'end_date': datetime(2013, 12, 5, 12),
+        'start_date': LIVE_START_DATE,
+        'end_date': LIVE_END_DATE,
         'repeat_unit': RepeatUnit.NEVER,
+        'repeat_step': 1,
         'booked_for_id': 'tim',
         'booked_for_name': 'tim',
         'created_by': 'admin',
@@ -198,8 +210,8 @@ RESERVATIONS = [
     },
     {
         'created_at': _create_utc_dt(2013, 11, 11, 11, 1, 1),
-        'start_date': datetime(2013, 12, 5, 10),
-        'end_date': datetime(2013, 1, 2, 12),
+        'start_date': LIVE_START_DATE,
+        'end_date': LIVE_END_DATE,
         'repeat_unit': RepeatUnit.WEEK,
         'repeat_step': 2,
         'booked_for_id': 'felmas',
@@ -212,8 +224,8 @@ RESERVATIONS = [
     },
     {
         'created_at': _create_utc_dt(2013, 12, 1, 23, 59),
-        'start_date': datetime(2013, 9, 17, 8),
-        'end_date': datetime(2014, 3, 15, 17),
+        'start_date': LIVE_START_DATE,
+        'end_date': LIVE_END_DATE,
         'repeat_unit': RepeatUnit.DAY,
         'repeat_step': 1,
         'booked_for_id': 'felmas',
@@ -225,8 +237,8 @@ RESERVATIONS = [
     },
     {
         'created_at': _create_utc_dt(2013, 12, 31, 23, 59),
-        'start_date': datetime(2014, 1, 1, 0),
-        'end_date': datetime(2014, 1, 1, 1),
+        'start_date': LIVE_START_DATE,
+        'end_date': LIVE_END_DATE,
         'repeat_unit': RepeatUnit.NEVER,
         'repeat_step': 1,
         'booked_for_id': 'felmas',
@@ -415,6 +427,10 @@ LOCATIONS = [
     {
         'name': 'FermiLab',
         'rooms': ROOMS[3:],
+        'room_equipment': ROOM_EQUIPMENT[5:]
+    },
+    {
+        'name': 'EmptyLocation',
         'room_equipment': ROOM_EQUIPMENT[5:]
     }
 ]
