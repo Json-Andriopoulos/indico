@@ -1013,7 +1013,7 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
             )
         )
 
-        return q.scalar() or 0
+        return (q.scalar()) or 0
 
     def getTotalBookableTime(self, start_date=None, end_date=None):
         if not end_date:
@@ -1038,23 +1038,22 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
         #     )
 
         # TODO: DB must calculate this
-        nonbookable_count = (
-            self.nonbookable_dates
-                .with_entities(
-                    func.sum(
-                        func.abs(
-                            greatest(NonBookableDate.start_date, start_date) - least(NonBookableDate.end_date, end_date)
-                        ) + 1
-                    )
-                )
-                .filter(
+
+        nonbookable_count = self.nonbookable_dates.with_entities(
+                            func.sum(
+                                func.abs(
+                                    greatest(NonBookableDate.start_date, start_date) - least(NonBookableDate.end_date, end_date)
+                                ) + 1
+                            )
+                        )
+        nonbookable_count = nonbookable_count.filter(
                     or_(
                         (NonBookableDate.start_date >= start_date) & (NonBookableDate.start_date <= end_date),
                         (NonBookableDate.end_date >= start_date) & (NonBookableDate.end_date <= end_date)
                     )
                 )
-                .scalar()
-            ) or 0
+
+        nonbookable_count = (nonbookable_count.scalar()) or 0
 
         # nonbookable_count = 0
         # for d in nonbookable_dates_in_interval:
@@ -1096,6 +1095,7 @@ class Room(versioned_cache(_cache, 'id'), db.Model, Serializer):
                     func.count(Reservation.id)
                 )
                 .group_by(
+                    Reservation.end_date,
                     Reservation.is_live,
                     Reservation.is_cancelled,
                     Reservation.is_rejected
