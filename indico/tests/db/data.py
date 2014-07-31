@@ -18,11 +18,14 @@
 ## along with Indico;if not, see <http://www.gnu.org/licenses/>.
 
 from datetime import date, datetime, time, timedelta
+from nose.tools import assert_equal, assert_not_equal, assert_is, assert_is_not,\
+    assert_in assert_not_in, assert_true, assert_false
 from random import randint
 from os import urandom
 from pytz import timezone
 
 from indico.modules.rb.models.reservations import RepeatUnit
+from MaKaC.user import Avatar, AvatarHolder, LoginInfo, Group, GroupHolder
 
 
 def _create_utc_dt(*args):
@@ -34,6 +37,9 @@ LIVE_END_DATE = datetime(2015, 01, 01, 14)
 NO_RESERVATION_PERIODS = [(datetime(2010, 01, 01, 10), LIVE_START_DATE),
                           (LIVE_END_DATE, datetime(2016, 01, 01, 01))]
 RESERVATION_PERIODS = [(LIVE_START_DATE, LIVE_END_DATE)]
+
+INITIAL_DATE = datetime(1990, 01, 01, 10)
+FINAL_DATE = datetime(2100, 01, 01, 10)
 
 
 BLOCKING_PRINCIPALS = [
@@ -266,7 +272,12 @@ ROOM_ATTRIBUTES = [
         'name': 'test',
         'title': 'Test',
         'raw_data': '{"comment": "test_room"}'
-    }
+    },
+    {
+        'name': 'allowed-booking-group',
+        'title': 'Allowed Booking Group',
+        'raw_data': '{"access_list": ["a@abc.com", "b@abc.com"]}'
+    },
 ]
 
 
@@ -301,7 +312,12 @@ ROOM_NONBOOKABLE_DATES = [
     {
         'start_date': datetime(2013, 12, 20, 17, 30),
         'end_date': datetime(2014, 1, 6, 8)
+    },
+    {
+        'start_date': datetime(2015, 12, 01),
+        'end_date': datetime(2015, 12, 02)
     }
+
 ]
 
 
@@ -310,24 +326,7 @@ PHOTOS = {
     'large_content': urandom(randint(1025, 4096))
 }
 
-
 ROOMS = [
-    {
-        'name': 'reception',
-        'site': 'meyrin',
-        'division': 'admin',
-        'building': '33',
-        'floor': '1',
-        'number': '0',
-        'is_active': True,
-        'is_reservable': False,
-        'owner_id': 'admin',
-        'nonbookable_dates': ROOM_NONBOOKABLE_DATES,
-        'bookable_times': ROOM_BOOKABLE_TIMES[:1],
-        'reservations': RESERVATIONS[:9],
-        'photo': PHOTOS,
-        'equipments': ROOM_EQUIPMENT[:2]
-    },
     {
         'name': 'main-meeting-hall',
         'site': 'meyrin',
@@ -337,7 +336,6 @@ ROOMS = [
         'number': '001',
         'is_active': True,
         'is_reservable': True,
-        'owner_id': 'tim',
         'reservations_need_confirmation': True,
         'capacity': 80,
         'surface_area': 145,
@@ -347,8 +345,26 @@ ROOMS = [
         'max_advance_days': 45,
         'bookable_times': ROOM_BOOKABLE_TIMES[:1],
         'nonbookable_dates': ROOM_NONBOOKABLE_DATES,
-        'equipments': ROOM_EQUIPMENT[:2],
+        'equipments': ROOM_EQUIPMENT[6:9],
         'attributes': ROOM_ATTRIBUTES[:2]
+    },
+    {
+        'name': 'reception',
+        'site': 'meyrin',
+        'division': 'admin',
+        'building': '33',
+        'floor': '1',
+        'number': '0',
+        'capacity': 80,
+        'surface_area': 145,
+        'is_active': True,
+        'is_reservable': False,
+        'nonbookable_dates': ROOM_NONBOOKABLE_DATES,
+        'bookable_times': ROOM_BOOKABLE_TIMES[:1],
+        'reservations': RESERVATIONS[:9],
+        'photo': PHOTOS,
+        'equipments': ROOM_EQUIPMENT[:8],
+        'attributes': ROOM_ATTRIBUTES
     },
     {
         'name': 'John\'s extra office',
@@ -357,11 +373,10 @@ ROOMS = [
         'building': '31',
         'floor': 'R',
         'number': 'last one on the right',
+        'reservations_need_confirmation': False,
         'is_active': True,
         'is_reservable': False,
-        'owner_id': 'john',
         'reservations_need_confirmation': True,
-        'capacity': 5,
         'max_advance_days': 7,
         'bookable_times': ROOM_BOOKABLE_TIMES[1:],
         'nonbookable_dates': ROOM_NONBOOKABLE_DATES
@@ -373,7 +388,8 @@ ROOMS = [
         'building': 'center',
         'floor': '0',
         'number': '1',
-        'owner_id': 'fred',
+        'capacity': 10,
+        'surface_area': 30,
         'equipments': ROOM_EQUIPMENT[5:7],
         'bookable_times': ROOM_BOOKABLE_TIMES[:1]
     },
@@ -382,10 +398,27 @@ ROOMS = [
         'building': 'right',
         'floor': '0',
         'number': '2',
-        'owner_id': 'frankenstein',
+        'capacity': 115,
+        'surface_area': 115,
         'reservations': RESERVATIONS[9:],
         'attributes': ROOM_ATTRIBUTES[2:]
+    },
+    {
+        'name': 'default_room',
+        'building': 'default',
+        'floor': '0',
+        'number': '0',
+        'capacity': 20,
+        'is_active': True,
+        'is_reservable': True,
+        'reservations_need_confirmation': False,
+        'notification_for_start': 0,
+        'notification_for_end': False,
+        'notification_for_responsible': False,
+        'notification_for_assistance': False,
+        'max_advance_days': 30
     }
+
 ]
 
 
@@ -422,7 +455,7 @@ LOCATIONS = [
         'default_aspect_id': 0,
         'rooms': ROOMS[:3],
         'attributes': ROOM_ATTRIBUTES,
-        'room_equipment': ROOM_EQUIPMENT[:5]
+        'room_equipment': ROOM_EQUIPMENT
     },
     {
         'name': 'FermiLab',
@@ -432,149 +465,5 @@ LOCATIONS = [
     {
         'name': 'EmptyLocation',
         'room_equipment': ROOM_EQUIPMENT[5:]
-    }
-]
-
-
-ATTRIBUTE_KEYS = [
-    {
-        'name': 'Test',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'Manager Group',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'IP',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'H323 IP',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'Live Webcast',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'Map URL',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'Documentation',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'allowed booking group',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'Notification Email',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'VidyoPanorama ID',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'Event Recording',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'Radiation Level',
-        'is_for_rooms': True,
-        'is_for_reservations': False
-    },
-    {
-        'name': 'H323 Point2Point',
-        'is_for_rooms': True,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'Vidyo',
-        'is_for_rooms': True,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'Audio Conference',
-        'is_for_rooms': True,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'CERN MCU',
-        'is_for_rooms': True,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'ESnet MCU',
-        'is_for_rooms': True,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'I don\'t know',
-        'is_for_rooms': True,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'EVO',
-        'is_for_rooms': True,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'Built-in (MCU) Bridge',
-        'is_for_rooms': True,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'ESnet Collaboration',
-        'is_for_rooms': True,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'Phone Conference',
-        'is_for_rooms': True,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'HERMES Collaboration',
-        'is_for_rooms': True,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'AVC',
-        'is_for_rooms': False,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'AVC Support',
-        'is_for_rooms': False,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'Assistance',
-        'is_for_rooms': False,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'ISDN Point2Point',
-        'is_for_rooms': False,
-        'is_for_reservations': True
-    },
-    {
-        'name': 'VRVS',
-        'is_for_rooms': False,
-        'is_for_reservations': True
     }
 ]
