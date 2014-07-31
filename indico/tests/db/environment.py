@@ -20,25 +20,26 @@
 ## along with Indico;if not, see <http://www.gnu.org/licenses/>.
 
 import transaction
-
 from flask.ext.testing import TestCase
 from flask.ext.sqlalchemy import models_committed
 from sqlalchemy.orm import configure_mappers
 
 from indico.core.db import db
-from MaKaC.user import Avatar
-from indico.modules.rb.models import *
-from indico.web.flask.app import make_app
 from indico.core.db.sqlalchemy.core import on_models_committed
+from indico.modules.rb.models import *
+from indico.tests.python.unit.util import IndicoTestCase
+from indico.web.flask.app import make_app
+from MaKaC.user import Avatar
 
 from .data import *
 
 
-class DBTest(TestCase):
+class DBTest(TestCase, IndicoTestCase):
 
     # SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
     SQLALCHEMY_DATABASE_URI = 'postgresql:///testing'
     TESTING = True
+    _requires = ['db.DummyUser', 'db.DummyGroup']
 
     def create_app(self):
         app = make_app(db_setup=False)
@@ -49,12 +50,21 @@ class DBTest(TestCase):
         return app
 
     def setUp(self):
+        super(DBTest, self).setUp()
         self.tearDown()
         db.create_all()
+        self.customise_users_and_groups()
         self.init_db()
 
     def get_without(self, d, ks=[]):
         return dict((k, v) for k, v in d.items() if k not in ks)
+
+    def customise_users_and_groups(self):
+        #very naive approach. Pending full owner id and
+        #manager group customisation.
+
+        for room in ROOMS:
+            room['owner_id'] = "0"
 
     def init_db(self):
 
@@ -164,7 +174,7 @@ class DBTest(TestCase):
             # blocking blocked rooms
             for blr in bl.get('blocked_rooms', []):
                 br = BlockedRoom(**self.get_without(blr, ['room']))
-                Room.getRoomByName(blr['room']).blocked_rooms.append(br)
+                Room.find_first(Room.name == blr['room']).blocked_rooms.append(br)
                 block.blocked_rooms.append(br)
 
             db.session.add(block)
