@@ -44,33 +44,33 @@ class TestLocation(DBTest):
 
     def compare_dict_and_object(self, d, o):
         for k, v in d.items():
-            assert v == getattr(o, k)
+            assert_equal(v, getattr(o, k))
 
-#*********************************************RUNNING_WITHOUT_ERRORS***************************************************
+#TESTS_RUNNING
 
     def testGetLocator(self):
         for l, loc in self.iterLocations():
-            assert loc.getLocator()['locationId'] == l['name']
+            assert_equal(loc.getLocator()['locationId'], l['name'])
 
     def testGetSupportEmails(self):
         for l, loc in self.iterLocations():
             if 'support_emails' in l:
-                assert loc.getSupportEmails(to_list=False) == l['support_emails']
-                assert loc.getSupportEmails() == l['support_emails'].split(',')
+                assert_equal(loc.getSupportEmails(to_list=False), l['support_emails'])
+                assert_equal(loc.getSupportEmails(), l['support_emails'].split(','))
 
     def testSetSupportEmails(self):
         for i, (l, loc) in enumerate(self.iterLocations()):
             loc.setSupportEmails(['a{}@example.com'.format(i), 'b{}@example.com'.format(i)])
 
         for i, (l, loc) in enumerate(self.iterLocations()):
-            assert loc.support_emails == 'a{i}@example.com,b{i}@example.com'.format(i=i)
+            assert_equal(loc.support_emails, 'a{i}@example.com,b{i}@example.com'.format(i=i))
 
     def testAddSupportEmails(self):
         for l, loc in self.iterLocations():
             loc.addSupportEmails('testing@cern.ch')
 
         for _, loc in self.iterLocations():
-            assert 'testing@cern.ch' in loc.getSupportEmails()
+            assert_in('testing@cern.ch', loc.getSupportEmails())
 
     def testAddSupportEmailsExisting(self):
         emails = []
@@ -79,7 +79,7 @@ class TestLocation(DBTest):
             loc.addSupportEmails(*emails[-1][:])
 
         for (_, loc), e in zip(self.iterLocations(), emails):
-            assert sorted(loc.getSupportEmails()) == sorted(e)
+            assert_equal(sorted(loc.getSupportEmails()), sorted(e))
 
     def testDeleteSupportEmails(self):
         test_email = 'testing-experimental@cern.ch'
@@ -87,11 +87,11 @@ class TestLocation(DBTest):
             loc.addSupportEmails(test_email)
 
         for _, loc in self.iterLocations():
-            assert test_email in loc.getSupportEmails()
+            assert_in(test_email, loc.getSupportEmails())
             loc.deleteSupportEmails(test_email)
 
         for _, loc in self.iterLocations():
-            assert test_email not in loc.getSupportEmails()
+            assert_not_in(test_email, loc.getSupportEmails())
 
     def testGetAspects(self):
         for l, loc in self.iterLocations():
@@ -103,7 +103,7 @@ class TestLocation(DBTest):
             if 'default_aspect_id' in l:
                 self.compare_dict_and_object(ASPECTS[l['default_aspect_id']], loc.default_aspect)
             else:
-                assert loc.default_aspect is None
+                assert_is(loc.default_aspect, None)
 
     def testSetDefaultAspect(self):
         test_aspect_name = 'testing-aspect'
@@ -116,84 +116,22 @@ class TestLocation(DBTest):
 
         for _, loc in self.iterLocations():
             if loc.default_aspect:
-                assert loc.default_aspect.name == (loc.name + test_aspect_name)
+                assert_equal(loc.default_aspect.name, (loc.name + test_aspect_name))
 
     def testIsMapAvailable(self):
         for l, loc in self.iterLocations():
-            assert loc.isMapAvailable() == ('aspects' in l)
+            assert_equal(loc.isMapAvailable(), ('aspects' in l))
 
     def testGetDefaultLocation(self):
         for l, loc in self.iterLocations():
             if 'is_default' in l:
-                assert loc == Location.getDefaultLocation()
+                assert_equal(loc, Location.getDefaultLocation())
 
     def testGetLocationByName(self):
         for l, loc in self.iterLocations():
-            assert l['name'] == loc.name
+            assert_equal(l['name'], loc.name)
 
-    def testRemoveLocationByName(self):
-        test_location_name = 'test_location'
-        db.session.add(Location(name=test_location_name))
-        transaction.commit()
-
-        assert Location.getLocationByName(test_location_name) is not None
-        Location.removeLocationByName(test_location_name)
-        transaction.commit()
-        assert Location.getLocationByName(test_location_name) is None
-
-    def testGetNumberOfLocations(self):
-        assert len(LOCATIONS) == Location.getNumberOfLocations()
-
-    def testGetNumberOfRooms(self):
-        for l, loc in self.iterLocations():
-            if 'rooms' in l.keys():
-                assert len(l['rooms']) == loc.getNumberOfRooms()
-            else:
-                assert loc.getNumberOfRooms() == 0
-
-    def testGetNumberOfActiveRooms(self):
-        for l, loc in self.iterLocations():
-            count_from_data = sum(r.get('is_active', True) for r in l.get('rooms', []))
-            assert count_from_data == loc.getNumberOfActiveRooms()
-
-    def testGetRooms(self):
-        for l, loc in self.iterLocations():
-            if 'rooms' in l.keys():
-                assert len(loc.getRooms()) == len(l['rooms'])
-                for pair in zip(loc.getRooms(), l['rooms']):
-                    self.compare_dict_and_object(pair[1], pair[0])
-            else:
-                assert loc.getRooms() == []
-
-    def testGetNumberOfReservableRooms(self):
-        for l, loc in self.iterLocations():
-            count_from_data = sum(r.get('is_reservable', True) for r in l.get('rooms', []))
-            assert count_from_data == loc.getNumberOfReservableRooms()
-
-    def testGetReservableRooms(self):
-        for l, loc in self.iterLocations():
-            rooms_from_db = sorted(map(lambda r: r.name, loc.getReservableRooms()))
-            rooms_from_data = sorted([r['name'] for r in l.get('rooms', [])
-                                      if r.get('is_reservable', True)])
-            assert rooms_from_data == rooms_from_db
-
-    def testGetTotalReservableCapacity(self):
-        default_capacity = getDefaultValue(Room, 'capacity')
-
-        for l, loc in self.iterLocations():
-            total = sum([r.get('capacity', default_capacity)
-                         for r in l.get('rooms', []) if r.get('is_reservable', True)])
-
-            assert total == (loc.getTotalReservableCapacity() or 0)
-
-    def testGetTotalReservableSurfaceArea(self):
-        for l, loc in self.iterLocations():
-            total = sum([r.get('surface_area', 0)
-                         for r in l.get('rooms', []) if r.get('is_reservable', True)])
-
-            assert total == (loc.getTotalReservableSurfaceArea() or 0)
-
-    def testGetBuildings(self):
+    def test_get_buildings(self):
         for l, loc in self.iterLocations():
             buildings = {}
             for r in l.get('rooms', []):
@@ -209,58 +147,13 @@ class TestLocation(DBTest):
                         'rooms': [r['name']],
                         'has_coordinates': bool(r.get('latitude', False) and r.get('longitude', False))
                     }
-            for b in loc.getBuildings():
+            for b in loc.get_buildings():
                 k = b['number']
-                assert k in buildings
+                assert_in(k, buildings)
                 for r in b['rooms']:
-                    assert r['name'] in buildings[k]['rooms']
+                    assert_in(r['name'], buildings[k]['rooms'])
 
-    def testGetReservationStats(self):
-        for l, loc in self.iterLocations():
-            num_of_reservations = 0
-            stats_num_of_resvs = 0
-            if 'rooms' in l.keys():
-                for r in l['rooms']:
-                    if 'reservations' in r.keys():
-                        num_of_reservations += len(r['reservations'])
+#TESTS_TO_BE_IMPLEMENTED
 
-            for field in loc.getReservationStats():
-                stats_num_of_resvs += loc.getReservationStats()[field]
-
-            assert stats_num_of_resvs == num_of_reservations
-
-#**********************************************EMPTY_METHODS***********************************************************
-    def testGetAverageOccupation(self):
-        #Receiving errors from getAverageOccupation function
-        #AttributeError: 'Location' object has no attribute 'getTotalBookedTimeInLastMonth'
+    def test_set_default(self):
         pass
-
-    def testTotalBookedTime(self):
-        for l, loc in self.iterLocations():
-            print loc.getTotalBookedTime()
-
-    def testTotalBookableTime(self):
-        #Function not implemented yet.
-        pass
-
-#******************************************************NON_RUNNING*****************************************************
-
-    def testSetDefaultLocation(self):
-        if len(LOCATIONS) < 2:
-            raise RuntimeWarning('Not enough locations for tis test,'
-                                 ' there should be at least 2 locations')
-        else:
-            old_default = Location.getDefaultLocation()
-            print old_default
-            name = None
-            for l, loc in self.iterLocations():
-                if not loc.is_default:
-                    Location.setDefaultLocation(loc)
-                    transaction.commit()
-                    name = l['name']
-                    self.assertTrue(loc.is_default)
-                    break
-            assert name == Location.getDefaultLocation().name
-            # revert change to decrease dependency between tests
-            Location.setDefaultLocation(old_default)
-            transaction.commit()
