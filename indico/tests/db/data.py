@@ -19,7 +19,7 @@
 
 from datetime import date, datetime, time, timedelta
 from nose.tools import assert_equal, assert_not_equal, assert_is, assert_is_not,\
-    assert_in assert_not_in, assert_true, assert_false
+    assert_in, assert_not_in, assert_true, assert_false
 from random import randint
 from os import urandom
 from pytz import timezone
