@@ -21,11 +21,12 @@
 from pprint import pprint
 import transaction
 
+from nose.tools import assert_equal, assert_not_equal, assert_is, assert_is_not,\
+    assert_in, assert_not_in, assert_true, assert_false
+
 from indico.core.db import db
-from indico.modules.rb.models.room_attributes import RoomAttribute
-from indico.modules.rb.models.room_equipments import RoomEquipment
 from indico.modules.rb.models.rooms import Room
-from indico.tests.db.data import *
+from indico.tests.db.data import ROOMS, LOCATIONS
 from indico.tests.db.environment import DBTest
 from indico.tests.db.util import diff
 
@@ -48,22 +49,6 @@ class TestRoom(DBTest):
             needs_confirmation = 'reservations_need_confirmation' in r and r['reservations_need_confirmation']
             assert_not_equal(room.is_auto_confirm, needs_confirmation)
 
-    def test_available_video_conference(self):
-        pass
-
-    def test_bookable_time_per_day(self):
-        for r, room in self.iterRooms():
-            if 'bookable_times' in r:
-                time_per_day = 0
-                for x in r['bookable_times']:
-                    time_per_day += (datetime.combine(date.today(), x['end_time']) -
-                                     datetime.combine(date.today(), x['start_time'])).total_seconds()
-
-                assert_equal(time_per_day, room.bookable_time_per_day)
-
-            else:
-                assert_equal(3600*24, room.bookable_time_per_day)
-
     def test_booking_url(self):
         for r, room in self.iterRooms():
             if room.id is None:
@@ -82,7 +67,7 @@ class TestRoom(DBTest):
         for r, room in self.iterRooms():
             if room.has_special_name:
                 assert_in(r['name'], room.full_name)
-            assert_in(room.generateName(), room.full_name)
+            assert_in(room.generate_name(), room.full_name)
 
     def test_has_booking_groups(self):
         for r, room in self.iterRooms():
@@ -92,7 +77,8 @@ class TestRoom(DBTest):
 
     def test_has_projector(self):
         for r, room in self.iterRooms():
-            assert_equal('equipments' in r and 'Computer Projector' in r['equipments'], room.has_projector)
+            assert_equal('available_equipment' in r and 'Computer Projector' in r['available_equipment'],
+                         room.has_projector)
 
     def test_has_special_name(self):
         for r, room in self.iterRooms():
@@ -100,7 +86,8 @@ class TestRoom(DBTest):
 
     def test_has_webcast_recording(self):
         for r, room in self.iterRooms():
-            assert_equal('equipments' in r and 'Webcast/Recording' in r['equipments'], room.has_webcast_recording)
+            assert_equal('available_equipment' in r and 'Webcast/Recording' in r['available_equipment'],
+                         room.has_webcast_recording)
 
     def test_is_public(self):
         for r, room in self.iterRooms():
@@ -141,15 +128,6 @@ class TestRoom(DBTest):
                 assert_in('auto-confirmation', description)
             else:
                 assert_in('needs confirmation', description)
-            if room.needs_video_conference_setup:
-                assert_in('video conference', description)
-
-    def test_needs_video_conference_setup(self):
-        for r, room in self.iterRooms():
-            if 'equipments' in r:
-                assert_equal('Video conference' in r['equipments'], room.needs_video_conference_setup)
-            else:
-                assert_false(room.needs_video_conference_setup)
 
     def test_large_photo_url(self):
         for r, room in self.iterRooms():
@@ -174,20 +152,20 @@ class TestRoom(DBTest):
 
     def test_has_equipment(self):
         for r, room in self.iterRooms():
-            if 'equipments' in r:
-                for equip in r['equipments']:
+            if 'available_equipment' in r:
+                for equip in r['available_equipment']:
                     assert_true(room.has_equipment(equip))
             assert_false(room.has_equipment('This equipment does not exist'))
 
     def test_find_available_video_conference(self):
         pass
 
-    def testGetAttributeByName(self):
+    def test_get_attribute_by_name(self):
         for r, room in self.iterRooms():
             if 'attributes' in r:
                 for attr in r['attributes']:
-                    assert_is_not(room.getAttributeByName(attr['name']), None)
-            assert_is(room.getAttributeByName('This attribute does not exist'), None)
+                    assert_is_not(room.get_attribute_by_name(attr['name']), None)
+            assert_is(room.get_attribute_by_name('This attribute does not exist'), None)
 
     def test_has_attribute(self):
         for r, room in self.iterRooms():
@@ -205,35 +183,23 @@ class TestRoom(DBTest):
     def test_generate_name(self):
         for r, room in self.iterRooms():
             if room.building:
-                assert_in(r['building'], room.generateName())
+                assert_in(r['building'], room.generate_name())
             if room.floor:
-                assert_in(r['floor'], room.generateName())
+                assert_in(r['floor'], room.generate_name())
             if room.number:
-                assert_in(r['number'], room.generateName())
+                assert_in(r['number'], room.generate_name())
 
-    def testGetFullName(self):
+    def test_full_name(self):
         for r, room in self.iterRooms():
-            assert_in(room.name, room.getFullName())
-            assert_in(room.generateName(), room.getFullName())
+            assert_in(room.name, room.full_name)
+            assert_in(room.generate_name(), room.full_name)
 
-    def testUpdateName(self):
+    def test_update_name(self):
         for r, room in self.iterRooms():
             if room.building and room.floor and room.number:
                 room.name = ''
-                room.updateName()
+                room.update_name()
                 assert_true(len(room.name) > 0)
-
-    def getAccessKey(self):
-        """
-        Nothing to test.
-        """
-        pass
-
-    def testGetRoomWithDefaults(self):
-        """
-        Nothing to test.
-        """
-        pass
 
     def test_find_all(self):
         all_rooms = Room.find_all()
@@ -242,37 +208,36 @@ class TestRoom(DBTest):
         #we get the concatenation of location.name and full name because
         #these values are used for sorting in the find_all method.
         for r, room in self.iterRooms():
-            lista.append(room.location.name + room.getFullName())
+            lista.append(room.location.name + room.full_name)
 
         lista = sorted(lista)
         assert_equal(len(all_rooms), len(lista))
 
         for i in range(len(all_rooms)):
-            assert_equal(all_rooms[i].location.name + all_rooms[i].getFullName(), lista[i])
+            assert_equal(all_rooms[i].location.name + all_rooms[i].full_name, lista[i])
 
-    def find_with_attribute(cls, attribute):
-        pass
+    def test_find_with_attribute(self):
+        for r, room in self.iterRooms():
+            for attr in r['attributes']:
+                rooms_with_attr = []
+                for room_with_attr in Room.find_with_attribute(attr['name']):
+                    rooms_with_attr.append(room_with_attr[0])
+                assert_in(room, rooms_with_attr)
 
     def getRoomsWithData(*args, **kwargs):
         pass
 
-    def testGetMaxCapacity(self):
+    def test_max_capacity(self):
         max_capacity = 0
         for r, room in self.iterRooms():
             if 'capacity' in r:
                 max_capacity = r['capacity'] if r['capacity'] > max_capacity else max_capacity
-        assert_equal(max_capacity, Room.getMaxCapacity())
+        assert_equal(max_capacity, Room.max_capacity)
 
     def filter_available(start_dt, end_dt, repetition, include_pre_bookings=True, include_pending_blockings=True):
         pass
 
     def getRoomsForRoomList(form, avatar):
-        pass
-
-    def getResponsible(self):
-        pass
-
-    def getResponsibleName(self):
         pass
 
     def has_live_reservations(self):
@@ -287,10 +252,6 @@ class TestRoom(DBTest):
     def isAvatarResponsibleForRooms(avatar):
         pass
 
-    def testGetEquipmentNames(self):
-        pass
-        #Does not work
-
     def removeEquipment(self, equipment_name):
         pass
 
@@ -298,10 +259,7 @@ class TestRoom(DBTest):
         pass
 
     def test_get_attribute_value(self):
-        for r, room in self.iterRooms():
-            if 'attributes' in r:
-                for attr in r['attributes']:
-                    assert_is_not(room.get_attribute_value(attr['name']), None)
+        pass
 
     def _can_be_booked(self, avatar, prebook=False, ignore_admin=False):
         pass
@@ -324,25 +282,8 @@ class TestRoom(DBTest):
     def test_is_owned_by(self):
         pass
 
-    def getGroups(self, group_name):
-        pass
-
-    def getAllManagers(self):
-        pass
-
     def check_advance_days(self, end_date, user=None, quiet=False):
         pass
 
     def check_bookable_times(self, start_time, end_time, user=None, quiet=False):
         pass
-
-    def test_get_nonbookable_days(self):
-        for r, room in self.iterRooms():
-            total_non_bookable_days = 0
-            if 'nonbookable_dates' in r:
-                for nmd in r['nonbookable_dates']:
-                    total_non_bookable_days += (nmd['end_date'] - nmd['start_date']).days + 1
-            assert_equal(room.get_nonbookable_days(INITIAL_DATE, FINAL_DATE), total_non_bookable_days)
-
-        #receiving error for more than one non-bookable periods.
-        #needs to be discussed.

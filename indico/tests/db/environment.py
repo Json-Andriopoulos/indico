@@ -1,5 +1,3 @@
-
-
 # -*- coding: utf-8 -*-
 ##
 ##
@@ -26,12 +24,23 @@ from sqlalchemy.orm import configure_mappers
 
 from indico.core.db import db
 from indico.core.db.sqlalchemy.core import on_models_committed
-from indico.modules.rb.models import *
+from indico.modules.rb.models.aspects import Aspect
+from indico.modules.rb.models.blockings import Blocking
+from indico.modules.rb.models.blocked_rooms import BlockedRoom
+from indico.modules.rb.models.blocking_principals import BlockingPrincipal
+from indico.modules.rb.models.equipment import EquipmentType
+from indico.modules.rb.models.locations import Location
+from indico.modules.rb.models.reservations import Reservation
+from indico.modules.rb.models.reservation_edit_logs import ReservationEditLog
+from indico.modules.rb.models.photos import Photo
+from indico.modules.rb.models.room_attributes import RoomAttribute, RoomAttributeAssociation
+from indico.modules.rb.models.room_bookable_hours import BookableHours
+from indico.modules.rb.models.room_nonbookable_periods import NonBookablePeriod
+from indico.modules.rb.models.rooms import Room
+from indico.tests.db.data import BLOCKINGS, LOCATIONS, ROOMS
 from indico.tests.python.unit.util import IndicoTestCase
 from indico.web.flask.app import make_app
 from MaKaC.user import Avatar
-
-from .data import *
 
 
 class DBTest(TestCase, IndicoTestCase):
@@ -71,25 +80,25 @@ class DBTest(TestCase, IndicoTestCase):
         # locations
         for loc in LOCATIONS:
             location = Location(
-                **self.get_without(loc, ['aspects', 'rooms', 'attributes', 'default_aspect_id', 'room_equipment'])
+                **self.get_without(loc, ['aspects', 'rooms', 'attributes', 'default_aspect_id', 'equipment_types'])
             )
 
             # aspects
-            default_aspect_id = loc.get('default_aspect_id', None)
-            for i, asp in enumerate(loc.get('aspects', [])):
+            default_aspect_id = loc['default_aspect_id']
+            for i, asp in enumerate(loc['aspects']):
                 a = Aspect(**asp)
                 location.aspects.append(a)
                 if i == default_aspect_id:
                     location.default_aspect = a
 
             # location attributes
-            for attr in loc.get('attributes', []):
-                v = RoomAttribute(**self.get_without(attr, ['raw_data']))
+            for attr in loc['attributes']:
+                v = RoomAttribute(**attr)
                 location.attributes.append(v)
 
             # location attributes
-            for equip in loc.get('room_equipment', []):
-                location.equipments.append(equip)
+            for equip in loc['equipment_types']:
+                location.equipment_types.append(EquipmentType(name=equip))
 
             db.session.add(location)
 
@@ -98,45 +107,44 @@ class DBTest(TestCase, IndicoTestCase):
         for loc in LOCATIONS:
             location = Location.query.filter_by(name=loc['name']).one()
             # rooms
-            for r in loc.get('rooms', []):
+            for r in loc['rooms']:
                 only_r = self.get_without(r, [
                     'attributes',
-                    'bookable_times',
-                    'equipments',
-                    'nonbookable_dates',
+                    'bookable_hours',
+                    'available_equipment',
+                    'nonbookable_periods',
                     'photo',
                     'reservations',
                 ])
                 room = Room(**only_r)
 
                 # room attributes
-                for attr in r.get('attributes', []):
+                for attr in r['attributes']:
                     attribute = RoomAttribute.query.filter_by(name=attr['name']).one()
-                    assoc = RoomAttributeAssociation(attribute_id=attribute.id, room_id=room.id,
-                                                     raw_data=attr['raw_data'])
+                    assoc = RoomAttributeAssociation(attribute_id=attribute.id, room_id=room.id)
                     room.attributes.append(assoc)
 
                 # room equipments
-                room.equipments.extend([
-                    location.get_equipment_by_name(eq) for eq in r.get('equipments', [])
+                room.available_equipment.extend([
+                    location.get_equipment_by_name(eq) for eq in r['available_equipment']
                 ])
 
                 # room bookable times
-                room.bookable_times.extend([
-                    BookableTime(**bt) for bt in r.get('bookable_times', [])
+                room.bookable_hours.extend([
+                    BookableHours(**bt) for bt in r['bookable_hours']
                 ])
 
                 # room nonbookabke dates
-                room.nonbookable_dates.extend([
-                    NonBookableDate(**nbt) for nbt in r.get('nonbookable_dates', [])
+                room.nonbookable_periods.extend([
+                    NonBookablePeriod(**nbt) for nbt in r['nonbookable_periods']
                 ])
 
                 # room photos
-                room.photo = Photo(**r.get('photos', {}))
+                room.photo = Photo(**r['photo'])
 
                 location.rooms.append(room)
 
-                for resv in r.get('reservations', []):
+                for resv in r['reservations']:
                     only_resv = self.get_without(resv, [
                         'attributes',
                         'edit_logs',
@@ -153,7 +161,7 @@ class DBTest(TestCase, IndicoTestCase):
 
                     # reservation edit_logs
                     reservation.edit_logs.extend([
-                        ReservationEditLog(**ed) for ed in resv.get('edit_logs', [])
+                        ReservationEditLog(**ed) for ed in resv['edit_logs']
                     ])
 
                     # reservation occurrences
@@ -172,7 +180,7 @@ class DBTest(TestCase, IndicoTestCase):
                                   for a in bl.get('allowed', [])])
 
             # blocking blocked rooms
-            for blr in bl.get('blocked_rooms', []):
+            for blr in bl['blocked_rooms']:
                 br = BlockedRoom(**self.get_without(blr, ['room']))
                 Room.find_first(Room.name == blr['room']).blocked_rooms.append(br)
                 block.blocked_rooms.append(br)

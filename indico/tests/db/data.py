@@ -17,14 +17,14 @@
 ## You should have received a copy of the GNU General Public License
 ## along with Indico;if not, see <http://www.gnu.org/licenses/>.
 
+import json
+
 from datetime import date, datetime, time, timedelta
-from nose.tools import assert_equal, assert_not_equal, assert_is, assert_is_not,\
-    assert_in, assert_not_in, assert_true, assert_false
-from random import randint
 from os import urandom
 from pytz import timezone
+from random import randint
 
-from indico.modules.rb.models.reservations import RepeatUnit
+from indico.modules.rb.models.reservations import RepeatFrequency
 from MaKaC.user import Avatar, AvatarHolder, LoginInfo, Group, GroupHolder
 
 
@@ -69,8 +69,8 @@ BLOCKED_ROOMS = [
 
 BLOCKINGS = [
     {
-        'created_by': 'admin',
-        'created_at': _create_utc_dt(2013, 11, 1, 8),
+        'created_by_id': 'admin',
+        'created_dt': _create_utc_dt(2013, 11, 1, 8),
         'start_date': datetime(2013, 12, 15, 8),
         'end_date': datetime(2013, 12, 15, 17, 30),
         'reason': 'maintenance',
@@ -120,138 +120,167 @@ RESERVATION_NOTIFICATIONS = [
 
 RESERVATIONS = [
     {
-        'created_at': _create_utc_dt(2013, 12, 2, 11, 30),
-        'start_date': LIVE_START_DATE,
-        'end_date': LIVE_END_DATE,
-        'repeat_unit': RepeatUnit.MONTH,
-        'repeat_step': 1,
+        'created_dt': _create_utc_dt(2013, 12, 2, 11, 30),
+        'start_dt': LIVE_START_DATE,
+        'end_dt': LIVE_END_DATE,
+        'repeat_frequency': RepeatFrequency.MONTH,
+        'repeat_interval': 1,
         'booked_for_id': 'admin',
         'booked_for_name': 'admin',
-        'created_by': 'admin',
-        'is_confirmed': True,
+        'created_by_id': 'admin',
+        'is_accepted': True,
         'booking_reason': 'This is what I want',
+        'contact_email': 'admin@cern.ch',
+        'contact_phone': '*123#',
         'attributes': RESERVATION_ATTRIBUTES,
         'edit_logs': RESERVATION_EDIT_LOGS
     },
     {
-        'created_at': _create_utc_dt(2013, 11, 2, 11, 30),
-        'start_date': LIVE_START_DATE,
-        'end_date': LIVE_END_DATE,
-        'repeat_unit': RepeatUnit.WEEK,
-        'repeat_step': 1,
+        'created_dt': _create_utc_dt(2013, 11, 2, 11, 30),
+        'start_dt': LIVE_START_DATE,
+        'end_dt': LIVE_END_DATE,
+        'repeat_frequency': RepeatFrequency.WEEK,
+        'repeat_interval': 1,
         'booked_for_id': 'admin',
         'booked_for_name': 'admin root',
-        'created_by': 'admin',
-        'is_confirmed': True,
+        'created_by_id': 'admin',
+        'is_accepted': True,
         'booking_reason': 'weekly group meetings',
         'contact_email': 'admin@cern.ch',
-        'attributes': RESERVATION_ATTRIBUTES[1:3]
+        'contact_phone': '*123#',
+        'attributes': RESERVATION_ATTRIBUTES[1:3],
+        'edit_logs': [],
     },
     {
-        'created_at': _create_utc_dt(2013, 11, 30, 17),
-        'start_date': LIVE_START_DATE,
-        'end_date': LIVE_END_DATE,
-        'repeat_unit': RepeatUnit.MONTH,
-        'repeat_step': 1,
+        'created_dt': _create_utc_dt(2013, 11, 30, 17),
+        'start_dt': LIVE_START_DATE,
+        'end_dt': LIVE_END_DATE,
+        'repeat_frequency': RepeatFrequency.MONTH,
+        'repeat_interval': 1,
         'booked_for_id': 'admin',
         'booked_for_name': 'admin root',
-        'created_by': 'admin',
-        'is_confirmed': True,
+        'created_by_id': 'admin',
+        'is_accepted': True,
         'booking_reason': 'confidential',
-        'attributes': RESERVATION_ATTRIBUTES[1:3]
+        'contact_email': 'admin@cern.ch',
+        'contact_phone': '*123#',
+        'attributes': RESERVATION_ATTRIBUTES[1:3],
+        'edit_logs': [],
     },
     {
-        'created_at': _create_utc_dt(2013, 12, 1, 11, 30),
-        'start_date': LIVE_START_DATE,
-        'end_date': LIVE_END_DATE,
-        'repeat_unit': RepeatUnit.NEVER,
-        'repeat_step': 1,
+        'created_dt': _create_utc_dt(2013, 12, 1, 11, 30),
+        'start_dt': LIVE_START_DATE,
+        'end_dt': LIVE_END_DATE,
+        'repeat_frequency': RepeatFrequency.NEVER,
+        'repeat_interval': 1,
         'booked_for_id': 'tim',
         'booked_for_name': 'tim ferref',
-        'created_by': 'admin',
-        'is_confirmed': True,
+        'created_by_id': 'admin',
+        'is_accepted': True,
         'is_cancelled': True,
         'booking_reason': 'can not be null',
+        'contact_email': 'admin@cern.ch',
+        'contact_phone': '*123#',
         'attributes': RESERVATION_ATTRIBUTES[3:],
+        'edit_logs': [],
     },
     {
-        'created_at': _create_utc_dt(2013, 12, 20),
-        'start_date': LIVE_START_DATE,
-        'end_date': LIVE_END_DATE,
-        'repeat_unit': RepeatUnit.NEVER,
-        'repeat_step': 1,
+        'created_dt': _create_utc_dt(2013, 12, 20),
+        'start_dt': LIVE_START_DATE,
+        'end_dt': LIVE_END_DATE,
+        'repeat_frequency': RepeatFrequency.NEVER,
+        'repeat_interval': 1,
         'booked_for_id': 'john',
         'booked_for_name': 'john kusack',
-        'created_by': 'john',
-        'is_confirmed': False,
+        'created_by_id': 'john',
+        'is_accepted': False,
         'is_rejected': True,
         'booking_reason': 'extra',
+        'contact_email': 'admin@cern.ch',
+        'contact_phone': '*123#',
         'attributes': RESERVATION_ATTRIBUTES[3:],
+        'edit_logs': [],
     },
     {
-        'created_at': _create_utc_dt(2012, 1, 1, 12),
-        'start_date': LIVE_START_DATE,
-        'end_date': LIVE_END_DATE,
-        'repeat_unit': RepeatUnit.NEVER,
-        'repeat_step': 1,
+        'created_dt': _create_utc_dt(2012, 1, 1, 12),
+        'start_dt': LIVE_START_DATE,
+        'end_dt': LIVE_END_DATE,
+        'repeat_frequency': RepeatFrequency.NEVER,
+        'repeat_interval': 1,
         'booked_for_id': 'fred',
         'booked_for_name': 'fred williams',
-        'created_by': 'frankenstein',
-        'is_confirmed': True,
+        'created_by_id': 'frankenstein',
+        'is_accepted': True,
         'booking_reason': 'no reason, he just wanted me to book',
+        'contact_email': 'admin@cern.ch',
+        'contact_phone': '*123#',
         'attributes': RESERVATION_ATTRIBUTES,
+        'edit_logs': [],
     },
     {
-        'created_at': _create_utc_dt(2008, 3, 3, 3, 3, 3),
-        'start_date': LIVE_START_DATE,
-        'end_date': LIVE_END_DATE,
-        'repeat_unit': RepeatUnit.NEVER,
-        'repeat_step': 1,
+        'created_dt': _create_utc_dt(2008, 3, 3, 3, 3, 3),
+        'start_dt': LIVE_START_DATE,
+        'end_dt': LIVE_END_DATE,
+        'repeat_frequency': RepeatFrequency.NEVER,
+        'repeat_interval': 1,
         'booked_for_id': 'tim',
         'booked_for_name': 'tim',
-        'created_by': 'admin',
-        'is_confirmed': True,
+        'created_by_id': 'admin',
+        'is_accepted': True,
         'booking_reason': 'big day for me',
+        'contact_email': 'admin@cern.ch',
+        'contact_phone': '*123#',
         'attributes': RESERVATION_ATTRIBUTES,
+        'edit_logs': [],
     },
     {
-        'created_at': _create_utc_dt(2013, 11, 11, 11, 1, 1),
-        'start_date': LIVE_START_DATE,
-        'end_date': LIVE_END_DATE,
-        'repeat_unit': RepeatUnit.WEEK,
-        'repeat_step': 2,
+        'created_dt': _create_utc_dt(2013, 11, 11, 11, 1, 1),
+        'start_dt': LIVE_START_DATE,
+        'end_dt': LIVE_END_DATE,
+        'repeat_frequency': RepeatFrequency.WEEK,
+        'repeat_interval': 2,
         'booked_for_id': 'felmas',
         'booked_for_name': 'ferhat elmas',
-        'created_by': 'felmas',
-        'is_confirmed': False,
+        'created_by_id': 'felmas',
+        'is_accepted': False,
         'is_rejected': True,
         'booking_reason': 'testing',
-        'attributes': RESERVATION_ATTRIBUTES
+        'contact_email': 'admin@cern.ch',
+        'contact_phone': '*123#',
+        'attributes': RESERVATION_ATTRIBUTES,
+        'edit_logs': [],
     },
     {
-        'created_at': _create_utc_dt(2013, 12, 1, 23, 59),
-        'start_date': LIVE_START_DATE,
-        'end_date': LIVE_END_DATE,
-        'repeat_unit': RepeatUnit.DAY,
-        'repeat_step': 1,
+        'created_dt': _create_utc_dt(2013, 12, 1, 23, 59),
+        'start_dt': LIVE_START_DATE,
+        'end_dt': LIVE_END_DATE,
+        'repeat_frequency': RepeatFrequency.DAY,
+        'repeat_interval': 1,
         'booked_for_id': 'felmas',
         'booked_for_name': 'ferhat elmas',
-        'created_by': 'pferreir',
-        'is_confirmed': True,
+        'created_by_id': 'pferreir',
+        'is_accepted': True,
         'booking_reason': 'special testing',
-        'attributes': RESERVATION_ATTRIBUTES
+        'contact_email': 'admin@cern.ch',
+        'contact_phone': '*123#',
+        'attributes': RESERVATION_ATTRIBUTES,
+        'edit_logs': [],
     },
     {
-        'created_at': _create_utc_dt(2013, 12, 31, 23, 59),
-        'start_date': LIVE_START_DATE,
-        'end_date': LIVE_END_DATE,
-        'repeat_unit': RepeatUnit.NEVER,
-        'repeat_step': 1,
+        'created_dt': _create_utc_dt(2013, 12, 31, 23, 59),
+        'start_dt': LIVE_START_DATE,
+        'end_dt': LIVE_END_DATE,
+        'repeat_frequency': RepeatFrequency.NEVER,
+        'repeat_interval': 1,
         'booked_for_id': 'felmas',
         'booked_for_name': 'ferhat elmas',
-        'created_by': 'pferreir',
-        'is_confirmed': True,
+        'created_by_id': 'pferreir',
+        'is_accepted': True,
         'booking_reason': 'special testing',
+        'contact_email': 'admin@cern.ch',
+        'contact_phone': '*123#',
+        'attributes': [],
+        'edit_logs': [],
     }
 ]
 
@@ -260,23 +289,30 @@ ROOM_ATTRIBUTES = [
     {
         'name': 'manager-group',
         'title': 'Manager Group',
-        'raw_data': '{"access_list": ["a@abc.com", "b@abc.com"]}'
+        'type': 'str',
+        'is_required': True,
+        'is_hidden': True,
     },
     {
         'name': 'map-url',
         'title': 'Map URL',
-        'raw_data': '{"google": "http://maps.google.com",'
-                    '"openstreetmap": "http://openstreetmap.org"}'
+        'type': 'str',
+        'is_required': True,
+        'is_hidden': True,
     },
     {
         'name': 'test',
         'title': 'Test',
-        'raw_data': '{"comment": "test_room"}'
+        'type': 'str',
+        'is_required': True,
+        'is_hidden': True,
     },
     {
         'name': 'allowed-booking-group',
         'title': 'Allowed Booking Group',
-        'raw_data': '{"access_list": ["a@abc.com", "b@abc.com"]}'
+        'type': 'str',
+        'is_required': True,
+        'is_hidden': True,
     },
 ]
 
@@ -296,7 +332,7 @@ ROOM_EQUIPMENT = [
 ]
 
 
-ROOM_BOOKABLE_TIMES = [
+ROOM_BOOKABLE_HOURS = [
     {
         'start_time': time(8),
         'end_time': time(18, 30)
@@ -308,22 +344,22 @@ ROOM_BOOKABLE_TIMES = [
 ]
 
 
-ROOM_NONBOOKABLE_DATES = [
+ROOM_NONBOOKABLE_PERIODS = [
     {
-        'start_date': datetime(2013, 12, 20, 17, 30),
-        'end_date': datetime(2014, 1, 6, 8)
+        'start_dt': datetime(2013, 12, 20, 17, 30),
+        'end_dt': datetime(2014, 1, 6, 8)
     },
     {
-        'start_date': datetime(2015, 12, 01),
-        'end_date': datetime(2015, 12, 02)
+        'start_dt': datetime(2015, 12, 01),
+        'end_dt': datetime(2015, 12, 02)
     }
 
 ]
 
 
 PHOTOS = {
-    'small_content': urandom(randint(0, 1024)),
-    'large_content': urandom(randint(1025, 4096))
+    'thumbnail': urandom(randint(0, 1024)),
+    'data': urandom(randint(1025, 4096))
 }
 
 ROOMS = [
@@ -337,15 +373,17 @@ ROOMS = [
         'is_active': True,
         'is_reservable': True,
         'reservations_need_confirmation': True,
+        'reservations': [],
         'capacity': 80,
         'surface_area': 145,
         'latitude': '42.45',
         'longitude': '11.09',
         'comments': u'☢ Please do not book unless really really necessary ☢',
         'max_advance_days': 45,
-        'bookable_times': ROOM_BOOKABLE_TIMES[:1],
-        'nonbookable_dates': ROOM_NONBOOKABLE_DATES,
-        'equipments': ROOM_EQUIPMENT[6:9],
+        'bookable_hours': ROOM_BOOKABLE_HOURS[:1],
+        'nonbookable_periods': ROOM_NONBOOKABLE_PERIODS,
+        'available_equipment': ROOM_EQUIPMENT[6:9],
+        'photo': {},
         'attributes': ROOM_ATTRIBUTES[:2]
     },
     {
@@ -359,11 +397,11 @@ ROOMS = [
         'surface_area': 145,
         'is_active': True,
         'is_reservable': False,
-        'nonbookable_dates': ROOM_NONBOOKABLE_DATES,
-        'bookable_times': ROOM_BOOKABLE_TIMES[:1],
+        'nonbookable_periods': ROOM_NONBOOKABLE_PERIODS,
+        'bookable_hours': ROOM_BOOKABLE_HOURS[:1],
         'reservations': RESERVATIONS[:9],
         'photo': PHOTOS,
-        'equipments': ROOM_EQUIPMENT[:8],
+        'available_equipment': ROOM_EQUIPMENT[:8],
         'attributes': ROOM_ATTRIBUTES
     },
     {
@@ -376,10 +414,13 @@ ROOMS = [
         'reservations_need_confirmation': False,
         'is_active': True,
         'is_reservable': False,
-        'reservations_need_confirmation': True,
+        'reservations': [],
         'max_advance_days': 7,
-        'bookable_times': ROOM_BOOKABLE_TIMES[1:],
-        'nonbookable_dates': ROOM_NONBOOKABLE_DATES
+        'photo': {},
+        'bookable_hours': ROOM_BOOKABLE_HOURS[1:],
+        'nonbookable_periods': ROOM_NONBOOKABLE_PERIODS,
+        'available_equipment': [],
+        'attributes': []
     },
     {
         'name': 'F1',
@@ -390,8 +431,12 @@ ROOMS = [
         'number': '1',
         'capacity': 10,
         'surface_area': 30,
-        'equipments': ROOM_EQUIPMENT[5:7],
-        'bookable_times': ROOM_BOOKABLE_TIMES[:1]
+        'reservations': [],
+        'photo': {},
+        'available_equipment': ROOM_EQUIPMENT[5:7],
+        'bookable_hours': ROOM_BOOKABLE_HOURS[:1],
+        'nonbookable_periods': [],
+        'attributes': []
     },
     {
         'name': 'F2',
@@ -400,7 +445,11 @@ ROOMS = [
         'number': '2',
         'capacity': 115,
         'surface_area': 115,
+        'photo': {},
         'reservations': RESERVATIONS[9:],
+        'bookable_hours': [],
+        'available_equipment': [],
+        'nonbookable_periods': [],
         'attributes': ROOM_ATTRIBUTES[2:]
     },
     {
@@ -412,11 +461,16 @@ ROOMS = [
         'is_active': True,
         'is_reservable': True,
         'reservations_need_confirmation': False,
-        'notification_for_start': 0,
-        'notification_for_end': False,
+        'notification_before_days': 0,
         'notification_for_responsible': False,
         'notification_for_assistance': False,
-        'max_advance_days': 30
+        'reservations': [],
+        'bookable_hours': [],
+        'photo': {},
+        'available_equipment': [],
+        'max_advance_days': 30,
+        'nonbookable_periods': [],
+        'attributes': []
     }
 
 ]
@@ -450,20 +504,28 @@ LOCATIONS = [
     {
         'name': 'CERN',
         'is_default': True,
-        'support_emails': 'admin@cern.ch,admin2@cern.ch',
         'aspects': ASPECTS,
         'default_aspect_id': 0,
         'rooms': ROOMS[:3],
         'attributes': ROOM_ATTRIBUTES,
-        'room_equipment': ROOM_EQUIPMENT
+        'equipment_types': ROOM_EQUIPMENT
     },
     {
         'name': 'FermiLab',
+        'is_default': False,
+        'aspects': [],
         'rooms': ROOMS[3:],
-        'room_equipment': ROOM_EQUIPMENT[5:]
+        'default_aspect_id': 1,
+        'attributes': [],
+        'equipment_types': ROOM_EQUIPMENT[5:]
     },
     {
         'name': 'EmptyLocation',
-        'room_equipment': ROOM_EQUIPMENT[5:]
+        'is_default': False,
+        'aspects': [],
+        'rooms': [],
+        'default_aspect_id': 2,
+        'attributes': [],
+        'equipment_types': ROOM_EQUIPMENT[5:]
     }
 ]
