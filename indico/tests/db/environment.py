@@ -22,6 +22,7 @@ from flask.ext.testing import TestCase
 from flask.ext.sqlalchemy import models_committed
 from sqlalchemy.orm import configure_mappers
 
+from indico.tests.python.unit.util import with_context
 from indico.core.db import db
 from indico.core.db.sqlalchemy.core import on_models_committed
 from indico.modules.rb.models.aspects import Aspect
@@ -75,6 +76,7 @@ class DBTest(TestCase, IndicoTestCase):
         for room in ROOMS:
             room['owner_id'] = "0"
 
+    @with_context('database')
     def init_db(self):
 
         # locations
@@ -165,7 +167,7 @@ class DBTest(TestCase, IndicoTestCase):
                     ])
 
                     # reservation occurrences
-                    reservation.create_occurrences(True, None)
+                    reservation.create_occurrences(True, self._dummy)
 
                     room.reservations.append(reservation)
             db.session.add(location)
