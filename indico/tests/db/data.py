@@ -284,6 +284,23 @@ RESERVATIONS = [
     }
 ]
 
+ROOM_ATTRIBUTE_ASSOCIATIONS = [
+    {
+        'attribute': 'manager-group',
+        'room': 'reception',
+        'value': 'fake_group'},
+    {
+        'attribute': 'manager-group',
+        'room': 'main-meeting-hall',
+        'value': 'another_group'
+    },
+    {
+        'attribute': 'allowed-booking-group',
+        'room': 'F2',
+        'value': 'fake_group'
+    }
+]
+
 
 ROOM_ATTRIBUTES = [
     {
@@ -343,6 +360,9 @@ ROOM_BOOKABLE_HOURS = [
     }
 ]
 
+NOT_FITTING_HOURS = {'start_time': time(7),
+                     'end_time': time(20, 30)}
+
 
 ROOM_NONBOOKABLE_PERIODS = [
     {
@@ -362,6 +382,10 @@ PHOTOS = {
     'data': urandom(randint(1025, 4096))
 }
 
+#The order of rooms is very critical when testing. If you want
+#to add new rooms please do it at the end of the list.
+ROOM_WITH_DUMMY_MANAGER_GROUP = 1
+ROOM_WITH_DUMMY_ALLOWED_BOOKING_GROUP = 4
 ROOMS = [
     {
         'name': 'main-meeting-hall',
@@ -372,7 +396,7 @@ ROOMS = [
         'number': '001',
         'is_active': True,
         'is_reservable': True,
-        'reservations_need_confirmation': True,
+        'reservations_need_confirmation': False,
         'reservations': [],
         'capacity': 80,
         'surface_area': 145,
@@ -396,7 +420,7 @@ ROOMS = [
         'capacity': 80,
         'surface_area': 145,
         'is_active': True,
-        'is_reservable': False,
+        'is_reservable': True,
         'nonbookable_periods': ROOM_NONBOOKABLE_PERIODS,
         'bookable_hours': ROOM_BOOKABLE_HOURS[:1],
         'reservations': RESERVATIONS[:9],
@@ -433,6 +457,8 @@ ROOMS = [
         'surface_area': 30,
         'reservations': [],
         'photo': {},
+        'is_active': False,
+        'is_reservable': True,
         'available_equipment': ROOM_EQUIPMENT[5:7],
         'bookable_hours': ROOM_BOOKABLE_HOURS[:1],
         'nonbookable_periods': [],
@@ -446,6 +472,8 @@ ROOMS = [
         'capacity': 115,
         'surface_area': 115,
         'photo': {},
+        'is_active': True,
+        'is_reservable': True,
         'reservations': RESERVATIONS[9:],
         'bookable_hours': [],
         'available_equipment': [],
