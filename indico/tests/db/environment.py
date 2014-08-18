@@ -22,7 +22,6 @@ from flask.ext.testing import TestCase
 from flask.ext.sqlalchemy import models_committed
 from sqlalchemy.orm import configure_mappers
 
-from indico.tests.python.unit.util import with_context
 from indico.core.db import db
 from indico.core.db.sqlalchemy.core import on_models_committed
 from indico.modules.rb.models.aspects import Aspect
@@ -38,8 +37,8 @@ from indico.modules.rb.models.room_attributes import RoomAttribute, RoomAttribut
 from indico.modules.rb.models.room_bookable_hours import BookableHours
 from indico.modules.rb.models.room_nonbookable_periods import NonBookablePeriod
 from indico.modules.rb.models.rooms import Room
-from indico.tests.db.data import BLOCKINGS, LOCATIONS, ROOMS
-from indico.tests.python.unit.util import IndicoTestCase
+from indico.tests.db.data import BLOCKINGS, LOCATIONS, ROOMS, ROOM_ATTRIBUTE_ASSOCIATIONS
+from indico.tests.python.unit.util import IndicoTestCase, with_context
 from indico.web.flask.app import make_app
 from MaKaC.user import Avatar
 
@@ -69,12 +68,16 @@ class DBTest(TestCase, IndicoTestCase):
     def get_without(self, d, ks=[]):
         return dict((k, v) for k, v in d.items() if k not in ks)
 
+    @with_context('database')
     def customise_users_and_groups(self):
         #very naive approach. Pending full owner id and
         #manager group customisation.
 
         for room in ROOMS:
-            room['owner_id'] = "0"
+            if room['name'] == 'default_room':
+                room['owner_id'] = self._avatar2.id
+            else:
+                room['owner_id'] = self._dummy.id
 
     @with_context('database')
     def init_db(self):
@@ -123,7 +126,12 @@ class DBTest(TestCase, IndicoTestCase):
                 # room attributes
                 for attr in r['attributes']:
                     attribute = RoomAttribute.query.filter_by(name=attr['name']).one()
-                    assoc = RoomAttributeAssociation(attribute_id=attribute.id, room_id=room.id)
+                    assoc_value = ""
+                    for item in ROOM_ATTRIBUTE_ASSOCIATIONS:
+                        if item["attribute"] == attr['name'] and item["room"] == room.name:
+                            assoc_value = item["value"]
+
+                    assoc = RoomAttributeAssociation(attribute_id=attribute.id, room_id=room.id, value=assoc_value)
                     room.attributes.append(assoc)
 
                 # room equipments
