@@ -14,21 +14,22 @@
 ## MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
 ## General Public License for more details.
 ##
-## You should have received a copy of the GNU General Public License
+## You should have received a copy of the GNU General Public License.
 ## along with Indico;if not, see <http://www.gnu.org/licenses/>.
 
-
-from pprint import pprint
 import transaction
 
+from datetime import date, time
 from nose.tools import assert_equal, assert_not_equal, assert_is, assert_is_not,\
     assert_in, assert_not_in, assert_true, assert_false
 
 from indico.core.db import db
 from indico.modules.rb.models.rooms import Room
-from indico.tests.db.data import ROOMS, LOCATIONS
+from indico.tests.db.data import ROOMS, LOCATIONS, ROOM_WITH_DUMMY_MANAGER_GROUP, \
+    ROOM_WITH_DUMMY_ALLOWED_BOOKING_GROUP, ROOM_ATTRIBUTE_ASSOCIATIONS, NOT_FITTING_HOURS
 from indico.tests.db.environment import DBTest
 from indico.tests.db.util import diff
+from indico.tests.python.unit.util import with_context
 
 
 class TestRoom(DBTest):
@@ -74,6 +75,11 @@ class TestRoom(DBTest):
             assert_equal(room.has_booking_groups,
                          'attributes' in r and
                          any(attr['name'] == 'allowed-booking-group' for attr in r['attributes']))
+
+    def test_has_vc(self):
+        for r, room in self.iterRooms():
+            assert_equal('available_equipment' in r and 'Video conference' in r['available_equipment'],
+                         room.has_vc)
 
     def test_has_projector(self):
         for r, room in self.iterRooms():
@@ -157,7 +163,7 @@ class TestRoom(DBTest):
                     assert_true(room.has_equipment(equip))
             assert_false(room.has_equipment('This equipment does not exist'))
 
-    def test_find_available_video_conference(self):
+    def test_find_available_vc_equipment(self):
         pass
 
     def test_get_attribute_by_name(self):
@@ -237,53 +243,95 @@ class TestRoom(DBTest):
     def filter_available(start_dt, end_dt, repetition, include_pre_bookings=True, include_pending_blockings=True):
         pass
 
-    def getRoomsForRoomList(form, avatar):
-        pass
-
     def has_live_reservations(self):
         for r, room in self.iterRooms():
             def is_live(resv):
                 #Live reservations: Happening now or future reservations.
-                return resv['start_date'] >= datetime.datetime.utcnow() or \
-                    resv['end_date'] >= datetime.datetime.utcnow()
+                return resv['start_date'] >= datetime.utcnow() or \
+                    resv['end_date'] >= datetime.utcnow()
             c = len(filter(is_live, r.get('reservations', []))) > 0
             assert_equal(c, room.doesHaveLiveReservations())
-
-    def isAvatarResponsibleForRooms(avatar):
-        pass
-
-    def removeEquipment(self, equipment_name):
-        pass
 
     def get_blocked_rooms(self, *dates, **kwargs):
         pass
 
     def test_get_attribute_value(self):
-        pass
+        for r, room in self.iterRooms():
+            for attr in r['attributes']:
+                assoc_value = ""
+                for item in ROOM_ATTRIBUTE_ASSOCIATIONS:
+                    if item["attribute"] == attr['name'] and item["room"] == room.name:
+                            assoc_value = item["value"]
+                assert_true(room.get_attribute_value(attr['name']) == assoc_value)
 
-    def _can_be_booked(self, avatar, prebook=False, ignore_admin=False):
-        pass
-
+    @with_context('database')
     def test_can_be_booked(self):
-        pass
+        for r, room in self.iterRooms():
+            if r['name'] == ROOMS[ROOM_WITH_DUMMY_MANAGER_GROUP]['name']:
+                #check for room's owner
+                if r['is_active'] and r['is_reservable']:
+                    assert_true(room.can_be_booked(self._avatar1))
+                else:
+                    raise Exception("This room needs to be reservable and active.")
+            elif r['name'] == ROOMS[ROOM_WITH_DUMMY_ALLOWED_BOOKING_GROUP]['name']:
+                #check for room's with allowed booking group
+                if r['is_active'] and r['is_reservable']:
+                    self._dummy_group_with_users.removeMember(self._avatar1)
+                    assert_true(room.can_be_booked(self._avatar1))
+                    self._dummy_group_with_users.addMember(self._avatar1)
+                else:
+                    raise Exception("This room needs to be reservable and active.")
+            else:
+                if room.is_active and room.is_reservable and not room.reservations_need_confirmation:
+                    #check for any user.
+                    assert_true(room.can_be_booked(self._avatar1))
+                else:
+                    assert_true(room.can_be_booked(self._dummy))
 
-    def can_be_overriden(self, avatar):
-        pass
+    @with_context('database')
+    def test_can_be_overriden(self):
+        for r, room in self.iterRooms():
+            if room.is_owned_by(self._avatar1):
+                assert_true(room.can_be_overriden(self._avatar1))
+                assert_true(room.can_be_overriden(self._dummy))
+            else:
+                assert_true(room.can_be_overriden(self._dummy))
 
-    def can_be_prebooked(self, avatar, ignore_admin=False):
-        pass
+    @with_context('database')
+    def test_can_be_modified(self):
+        for r, room in self.iterRooms():
+            #checking with an avatar and not an accessWrapper
+            assert_false(room.can_be_modified(self._avatar1))
+            assert_true(room.can_be_modified(self._dummy))
 
-    def can_be_modified(self, accessWrapper):
-        pass
+    @with_context('database')
+    def test_can_be_deleted(self):
+        for r, room in self.iterRooms():
+            #checking with an avatar and not an accessWrapper
+            assert_false(room.can_be_deleted(self._avatar1))
+            assert_true(room.can_be_deleted(self._dummy))
 
-    def can_be_deleted(self, accessWrapper):
-        pass
-
+    @with_context('database')
     def test_is_owned_by(self):
-        pass
+        for r, room in self.iterRooms():
+            if r['name'] == ROOMS[ROOM_WITH_DUMMY_MANAGER_GROUP]['name']:
+                assert_true(room.is_owned_by(self._avatar1))
+            else:
+                assert_true(room.is_owned_by(self._dummy))
+                assert_false(room.is_owned_by(self._avatar1))
 
-    def check_advance_days(self, end_date, user=None, quiet=False):
+    def test_check_advance_days(self):
         pass
+        #needs fixing
 
-    def check_bookable_times(self, start_time, end_time, user=None, quiet=False):
-        pass
+    @with_context('database')
+    def test_check_bookable_hours(self):
+        for r, room in self.iterRooms():
+            assert_true(room.check_bookable_hours(time(10, 30), time(17, 30), self._dummy, True))
+            if room.is_owned_by(self._avatar1):
+                assert_true(room.check_bookable_hours(time(10, 30), time(17, 30), self._avatar1, True))
+            if 'bookable_hours' in r and r['bookable_hours']:
+                for bk_hour in r['bookable_hours']:
+                    assert_true(room.check_bookable_hours(bk_hour['start_time'], bk_hour['end_time'], None, True))
+                assert_false(room.check_bookable_hours(NOT_FITTING_HOURS['start_time'],
+                                                       NOT_FITTING_HOURS['end_time'], None, True))
