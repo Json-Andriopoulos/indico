@@ -17,28 +17,28 @@
 ## You should have received a copy of the GNU General Public License
 ## along with Indico;if not, see <http://www.gnu.org/licenses/>.
 
-from pprint import pprint
-
 import transaction
 
-from dictdiffer import diff
-from sqlalchemy import exists
+from nose.tools import assert_equal, assert_not_equal, assert_is, assert_is_not,\
+    assert_in, assert_not_in, assert_true, assert_false
 
 from indico.core.db import db
 from indico.modules.rb.models.aspects import Aspect
 from indico.modules.rb.models.locations import Location
 from indico.modules.rb.models.rooms import Room
-from indico.modules.rb.models.utils import clone, getDefaultValue
-from indico.tests.db.data import *
+from indico.tests.db.data import LOCATIONS
 from indico.tests.db.environment import DBTest
+from indico.tests.python.unit.util import with_context
 
 
 class TestLocation(DBTest):
+    #_loc is used for data locations while loc is used for
+    #locations retrieved from the test database.
 
     def iterLocations(self):
-        for l in LOCATIONS:
-            loc = Location.getLocationByName(l['name'])
-            yield l, loc
+        for _loc in LOCATIONS:
+            loc = Location.find_first(Location.name == _loc['name'])
+            yield _loc, loc
             db.session.add(loc)
         transaction.commit()
 
@@ -46,95 +46,42 @@ class TestLocation(DBTest):
         for k, v in d.items():
             assert_equal(v, getattr(o, k))
 
-#TESTS_RUNNING
+    def test_get_locator(self):
+        for _loc, loc in self.iterLocations():
+            assert_equal(loc.getLocator()['locationId'], _loc['name'])
 
-    def testGetLocator(self):
-        for l, loc in self.iterLocations():
-            assert_equal(loc.getLocator()['locationId'], l['name'])
-
-    def testGetSupportEmails(self):
-        for l, loc in self.iterLocations():
-            if 'support_emails' in l:
-                assert_equal(loc.getSupportEmails(to_list=False), l['support_emails'])
-                assert_equal(loc.getSupportEmails(), l['support_emails'].split(','))
-
-    def testSetSupportEmails(self):
-        for i, (l, loc) in enumerate(self.iterLocations()):
-            loc.setSupportEmails(['a{}@example.com'.format(i), 'b{}@example.com'.format(i)])
-
-        for i, (l, loc) in enumerate(self.iterLocations()):
-            assert_equal(loc.support_emails, 'a{i}@example.com,b{i}@example.com'.format(i=i))
-
-    def testAddSupportEmails(self):
-        for l, loc in self.iterLocations():
-            loc.addSupportEmails('testing@cern.ch')
-
-        for _, loc in self.iterLocations():
-            assert_in('testing@cern.ch', loc.getSupportEmails())
-
-    def testAddSupportEmailsExisting(self):
-        emails = []
-        for l, loc in self.iterLocations():
-            emails.append(loc.getSupportEmails())
-            loc.addSupportEmails(*emails[-1][:])
-
-        for (_, loc), e in zip(self.iterLocations(), emails):
-            assert_equal(sorted(loc.getSupportEmails()), sorted(e))
-
-    def testDeleteSupportEmails(self):
-        test_email = 'testing-experimental@cern.ch'
-        for l, loc in self.iterLocations():
-            loc.addSupportEmails(test_email)
-
-        for _, loc in self.iterLocations():
-            assert_in(test_email, loc.getSupportEmails())
-            loc.deleteSupportEmails(test_email)
-
-        for _, loc in self.iterLocations():
-            assert_not_in(test_email, loc.getSupportEmails())
-
-    def testGetAspects(self):
-        for l, loc in self.iterLocations():
-            for aspect_dict, aspect in zip(l.get('aspects', []), loc.getAspects()):
-                self.compare_dict_and_object(aspect_dict, aspect)
-
-    def testGetDefaultAspect(self):
-        for l, loc in self.iterLocations():
-            if 'default_aspect_id' in l:
-                self.compare_dict_and_object(ASPECTS[l['default_aspect_id']], loc.default_aspect)
+    def test_is_map_available(self):
+        for _loc, loc in self.iterLocations():
+            if 'aspects' in _loc and _loc['aspects']:
+                assert_true(loc.is_map_available)
             else:
-                assert_is(loc.default_aspect, None)
+                assert_false(loc.is_map_available)
 
-    def testSetDefaultAspect(self):
-        test_aspect_name = 'testing-aspect'
-        for l, loc in self.iterLocations():
-            if loc.default_aspect:
-                test_aspect = clone(Aspect, loc.default_aspect)
-                test_aspect.name = l['name'] + test_aspect_name
-                loc.aspects.append(test_aspect)
-                loc.setDefaultAspect(test_aspect)
+    def test_default_location(self):
+        default_location = Location.default_location
+        for _loc, loc in self.iterLocations():
+            if 'is_default' in _loc and _loc['is_default']:
+                assert_equal(loc, default_location)
+            else:
+                assert_not_equal(loc, default_location)
 
-        for _, loc in self.iterLocations():
-            if loc.default_aspect:
-                assert_equal(loc.default_aspect.name, (loc.name + test_aspect_name))
+    def test_set_default(self):
+        pass
 
-    def testIsMapAvailable(self):
-        for l, loc in self.iterLocations():
-            assert_equal(loc.isMapAvailable(), ('aspects' in l))
+    def test_get_attribute_by_name(self):
+        for _loc, loc in self.iterLocations():
+            for attr in _loc['attributes']:
+                assert_equal(loc.get_attribute_by_name(attr['name']).name, attr['name'])
 
-    def testGetDefaultLocation(self):
-        for l, loc in self.iterLocations():
-            if 'is_default' in l:
-                assert_equal(loc, Location.getDefaultLocation())
-
-    def testGetLocationByName(self):
-        for l, loc in self.iterLocations():
-            assert_equal(l['name'], loc.name)
+    def test_get_equipment_by_name(self):
+        for _loc, loc in self.iterLocations():
+            for equip in _loc['equipment_types']:
+                assert_equal(loc.get_equipment_by_name(equip).name, equip)
 
     def test_get_buildings(self):
-        for l, loc in self.iterLocations():
+        for _loc, loc in self.iterLocations():
             buildings = {}
-            for r in l.get('rooms', []):
+            for r in _loc['rooms']:
                 k = r.get('building')
                 if k in buildings:
                     buildings[k]['rooms'].append(r['name'])
@@ -152,8 +99,3 @@ class TestLocation(DBTest):
                 assert_in(k, buildings)
                 for r in b['rooms']:
                     assert_in(r['name'], buildings[k]['rooms'])
-
-#TESTS_TO_BE_IMPLEMENTED
-
-    def test_set_default(self):
-        pass
