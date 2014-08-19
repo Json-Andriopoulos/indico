@@ -37,7 +37,7 @@ from indico.modules.rb.models.room_attributes import RoomAttribute, RoomAttribut
 from indico.modules.rb.models.room_bookable_hours import BookableHours
 from indico.modules.rb.models.room_nonbookable_periods import NonBookablePeriod
 from indico.modules.rb.models.rooms import Room
-from indico.tests.db.data import BLOCKINGS, LOCATIONS, ROOMS, ROOM_ATTRIBUTE_ASSOCIATIONS
+from indico.tests.db.data import BLOCKINGS, LOCATIONS, ROOMS, ROOM_ATTRIBUTE_ASSOCIATIONS, RESERVATIONS
 from indico.tests.python.unit.util import IndicoTestCase, with_context
 from indico.web.flask.app import make_app
 from MaKaC.user import Avatar
@@ -70,14 +70,16 @@ class DBTest(TestCase, IndicoTestCase):
 
     @with_context('database')
     def customise_users_and_groups(self):
-        #very naive approach. Pending full owner id and
-        #manager group customisation.
 
         for room in ROOMS:
             if room['name'] == 'default_room':
                 room['owner_id'] = self._avatar2.id
             else:
                 room['owner_id'] = self._dummy.id
+
+        for res in RESERVATIONS:
+            res['created_by_id'] = self._avatar1.id
+            res['booked_for_id'] = self._avatar2.id
 
     @with_context('database')
     def init_db(self):
