@@ -32,13 +32,13 @@ from indico.tests.python.unit.util import with_context
 
 
 class TestLocation(DBTest):
-    #_loc is used for data locations while loc is used for
+    #loc_data is used for data locations while loc is used for
     #locations retrieved from the test database.
 
     def iterLocations(self):
-        for _loc in LOCATIONS:
-            loc = Location.find_first(Location.name == _loc['name'])
-            yield _loc, loc
+        for loc_data in LOCATIONS:
+            loc = Location.find_first(Location.name == loc_data['name'])
+            yield loc_data, loc
             db.session.add(loc)
         transaction.commit()
 
@@ -47,20 +47,20 @@ class TestLocation(DBTest):
             assert_equal(v, getattr(o, k))
 
     def test_get_locator(self):
-        for _loc, loc in self.iterLocations():
-            assert_equal(loc.getLocator()['locationId'], _loc['name'])
+        for loc_data, loc in self.iterLocations():
+            assert_equal(loc.getLocator()['locationId'], loc_data['name'])
 
     def test_is_map_available(self):
-        for _loc, loc in self.iterLocations():
-            if 'aspects' in _loc and _loc['aspects']:
+        for loc_data, loc in self.iterLocations():
+            if 'aspects' in loc_data and loc_data['aspects']:
                 assert_true(loc.is_map_available)
             else:
                 assert_false(loc.is_map_available)
 
     def test_default_location(self):
         default_location = Location.default_location
-        for _loc, loc in self.iterLocations():
-            if 'is_default' in _loc and _loc['is_default']:
+        for loc_data, loc in self.iterLocations():
+            if 'is_default' in loc_data and loc_data['is_default']:
                 assert_equal(loc, default_location)
             else:
                 assert_not_equal(loc, default_location)
@@ -69,19 +69,19 @@ class TestLocation(DBTest):
         pass
 
     def test_get_attribute_by_name(self):
-        for _loc, loc in self.iterLocations():
-            for attr in _loc['attributes']:
+        for loc_data, loc in self.iterLocations():
+            for attr in loc_data['attributes']:
                 assert_equal(loc.get_attribute_by_name(attr['name']).name, attr['name'])
 
     def test_get_equipment_by_name(self):
-        for _loc, loc in self.iterLocations():
-            for equip in _loc['equipment_types']:
+        for loc_data, loc in self.iterLocations():
+            for equip in loc_data['equipment_types']:
                 assert_equal(loc.get_equipment_by_name(equip).name, equip)
 
     def test_get_buildings(self):
-        for _loc, loc in self.iterLocations():
+        for loc_data, loc in self.iterLocations():
             buildings = {}
-            for r in _loc['rooms']:
+            for r in loc_data['rooms']:
                 k = r.get('building')
                 if k in buildings:
                     buildings[k]['rooms'].append(r['name'])
